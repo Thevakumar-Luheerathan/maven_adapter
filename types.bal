@@ -3,6 +3,21 @@
 
 import ballerina/http;
 
+public type PackageMetadata record {
+    string platform;
+    string languageSpecificationVersion;
+    boolean isDeprecated;
+    string deprecateMessage;
+    string ballerinaVersion;
+    ModuleInfo[] modules;
+    string balToolId;
+    string graalvmCompatible;
+};
+
+public type ModuleInfo record {
+    string name;
+};
+
 public type DependencyResponse record {
     ResolvedPackage[] packages?;
 };
@@ -332,24 +347,7 @@ public type PackageJsonSchema record {
     string organization;
     string name;
     string version;
-    string platform;
-    string languageSpecificationVersion;
-    string URL?;
-    string balaVersion;
-    # Location of the module's .bala file
-    string balaURL;
-    string digest?;
-    string readme?;
-    boolean template;
-    string[] licenses;
-    string[] authors;
-    # Source code location
-    string sourceCodeLocation?;
-    string[] keywords;
-    string ballerinaVersion;
-    int createdDate;
-    string balToolId;
-    ModuleJsonSchema[] modules;
+    string summary;
 };
 
 public type ModuleResolutionResponseSchema_resolvedModules record {

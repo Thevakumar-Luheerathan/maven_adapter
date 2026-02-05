@@ -66,6 +66,9 @@ dependencies = [
 	{org = "ballerina", name = "os"},
 	{org = "ballerina", name = "time"}
 ]
+modules = [
+	{org = "ballerina", packageName = "file", moduleName = "file"}
+]
 
 [[package]]
 org = "ballerina"
@@ -116,6 +119,9 @@ modules = [
 org = "ballerina"
 name = "jballerina.java"
 version = "0.0.0"
+modules = [
+	{org = "ballerina", packageName = "jballerina.java", moduleName = "jballerina.java"}
+]
 
 [[package]]
 org = "ballerina"
@@ -269,6 +275,9 @@ dependencies = [
 	{org = "ballerina", name = "io"},
 	{org = "ballerina", name = "jballerina.java"}
 ]
+modules = [
+	{org = "ballerina", packageName = "os", moduleName = "os"}
+]
 
 [[package]]
 org = "ballerina"
@@ -341,9 +350,12 @@ org = "luheerathan"
 name = "maven_adapter"
 version = "0.1.0"
 dependencies = [
+	{org = "ballerina", name = "file"},
 	{org = "ballerina", name = "http"},
 	{org = "ballerina", name = "io"},
+	{org = "ballerina", name = "jballerina.java"},
 	{org = "ballerina", name = "log"},
+	{org = "ballerina", name = "os"},
 	{org = "ballerina", name = "test"},
 	{org = "ballerina", name = "url"},
 	{org = "ballerinai", name = "observe"}

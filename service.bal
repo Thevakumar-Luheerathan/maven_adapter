@@ -222,6 +222,10 @@ service /repository on new http:Listener(9090) {
         }
     }
 
+    resource function head [string... path]() returns json {
+        return {};
+    }
+
     resource function 'default [string... path](http:Request request) returns http:Ok {
         string requestPath = string:'join("/", ...path);
         string method = request.method;

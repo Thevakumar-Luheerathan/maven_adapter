@@ -2,6 +2,24 @@ import ballerina/file;
 import ballerina/http;
 import ballerina/io;
 import ballerina/log;
+import ballerina/constraint;
+
+
+@constraint:String {
+    pattern: {
+        value: re `.*-depgraph\.json`,
+        message: "File name must end with -depgraph.json"
+    }
+}
+type DepGraphFile string;
+
+@constraint:String {
+    pattern: {
+        value: re `.*\.bala`,
+        message: "File name must end with -depgraph.json"
+    }
+}
+type BalaFile string;
 
 service /repository on new http:Listener(9090) {
     final string serviceUrl = "https://api.central.ballerina.io/2.0/registry";
@@ -12,25 +30,14 @@ service /repository on new http:Listener(9090) {
         self.centralApiClient = check new (self.serviceUrl, self.httpClientConfig);
     }
 
-    resource function get [string org]/[string package]/[string version]/dependency\-graph\.json() returns http:Response|http:InternalServerError {
-        do {
-            log:printInfo(string `Requesting the dependency graph for org:${org} package:${package} version:${version}`);
-            http:Response centralResponse = check self.centralApiClient->/packages/resolve\-dependencies.post( {
-                packages: [
-                    {
-                        org: org,
-                        name: package,
-                        version: version,
-                        mode: "hard"
-                    }
-                ]
-            });
-            return centralResponse;
-        } on fail error err {
-            log:printError(string `Error occured while getting dependency graph for org:${org} package:${package} version:${version} reason:${err.message()}`);
-            return {body: string `Error occured while getting dependency graph for org:${org} package:${package} version:${version}`};
-        }
-    }
+    // resource function get [string org]/[string package]/[string version]/[DepGraphFile depGraphFile]() returns http:Response|http:InternalServerError {
+    //     do {
+
+    //     } on fail error err {
+    //         log:printError(string `Error occured while getting dependency graph for org:${org} package:${package} version:${version} reason:${err.message()}`);
+    //         return {body: string `Error occured while getting dependency graph for org:${org} package:${package} version:${version}`};
+    //     }
+    // }
 
     resource function get [string org]/[string package]/[string version]/package\.json() returns http:Response|http:InternalServerError {
         do {
@@ -65,23 +72,17 @@ service /repository on new http:Listener(9090) {
         }
     }
 
-    isolated resource function get [string org]/[string package]/[string ver]/[string balafile]() returns http:Response|http:InternalServerError {
+    isolated resource function get [string org]/[string package]/[string ver]/[string file]() returns http:Response|http:InternalServerError {
         do {
-            log:printInfo(string `Requesting the package org:${org} package:${package} version:${ver}`);
-            http:Response centralResponse = check self.centralApiClient->/packages/[org]/[package]/[ver]({
-                "Accept-Encoding": "identity",
-                "Accept": "application/octet-stream"
-            });
-            if centralResponse.statusCode != 302 {
-                check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
+            if file.endsWith(".bala") {
+                return check self.getBalaFile(org, package, ver);
+            } else if (file.endsWith("-depgraph.json")) {
+                return check self.getDependencyGraph(org, package, ver);
             }
-            string filePath = check centralResponse.getHeader("Location");
-            http:Client fileServer = check new (filePath);
-            http:Response downloadResponse = check fileServer->get("");
-            return downloadResponse;
+            return {body: string `Requested file ${file} is not supported. Only .bala and -depgraph.json files are supported.`};
         } on fail error err {
-            log:printError(string `Error occured while pulling the package org:${org} package:${package} version:${ver} reason:${err.message()}`);
-            return {body: string `Error occured while pulling the package org:${org} package:${package} version:${ver}`};
+            log:printError(string `Error occured while pulling the artifact org:${org} package:${package} version:${ver} reason:${err.message()}`);
+            return {body: string `Error occured while pulling the artifact org:${org} package:${package} version:${ver}`};
         }
     }
 
@@ -218,4 +219,35 @@ service /repository on new http:Listener(9090) {
         return http:OK;
     }
 
+    isolated function getBalaFile(string org, string package, string ver) returns http:Response|error {
+        log:printInfo(string `Requesting the package org:${org} package:${package} version:${ver}`);
+        http:Response centralResponse = check self.centralApiClient->/packages/[org]/[package]/[ver]({
+            "Accept-Encoding": "identity",
+            "Accept": "application/octet-stream"
+        });
+        if centralResponse.statusCode != 302 {
+            check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
+        }
+        string filePath = check centralResponse.getHeader("Location");
+        http:Client fileServer = check new (filePath);
+        http:Response downloadResponse = check fileServer->get("");
+        return downloadResponse;
+    }
+
+    isolated function getDependencyGraph(string org, string package, string ver) returns http:Response|error {
+        log:printInfo(string `Requesting the dependency graph for org:${org} package:${package} version:${ver}`);
+        http:Response centralResponse = check self.centralApiClient->/packages/resolve\-dependencies.post( {
+            packages: [
+                {
+                    org: org,
+                    name: package,
+                    version: ver,
+                    mode: "hard"
+                }
+            ]
+        });
+        return centralResponse;
+    }
 }
+
+

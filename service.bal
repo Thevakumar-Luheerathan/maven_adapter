@@ -15,30 +15,17 @@ service /repository on new http:Listener(9090) {
     resource function get [string org]/[string package]/[string version]/dependency\-graph\.json() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Requesting the dependency graph for org:${org} package:${package} version:${version}`);
-            http:Response centralResponse = check self.centralApiClient->/packages/[org]/[package]/[version]({
-                "Accept-Encoding": "identity",
-                "Accept": "application/octet-stream"
+            http:Response centralResponse = check self.centralApiClient->/packages/resolve\-dependencies.post( {
+                packages: [
+                    {
+                        org: org,
+                        name: package,
+                        version: version,
+                        mode: "hard"
+                    }
+                ]
             });
-            if centralResponse.statusCode != 302 {
-                check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
-            }
-            string filePath = check centralResponse.getHeader("Location");
-            http:Client fileServer = check new (filePath);
-            http:Response downloadResponse = check fileServer->get("");
-
-            string tempBalaDir = check file:createTempDir();
-            string tempBalaFile = check file:joinPath(tempBalaDir, "temp.bala");
-            stream<byte[], io:Error?> byteStream = check downloadResponse.getByteStream();
-            io:Error? writeResult = io:fileWriteBlocksFromStream(tempBalaFile, byteStream);
-            if writeResult is io:Error {
-                check error(string `Failed to write the downloaded bala file to disk`);
-            }
-            check byteStream.close();
-            json packageJson = check getDependencyGraphFromBala(tempBalaDir, tempBalaFile);
-            http:Response response = new;
-            response.setJsonPayload(packageJson);
-            response.setHeader("Content-Type", "application/json");
-            return response;
+            return centralResponse;
         } on fail error err {
             log:printError(string `Error occured while getting dependency graph for org:${org} package:${package} version:${version} reason:${err.message()}`);
             return {body: string `Error occured while getting dependency graph for org:${org} package:${package} version:${version}`};
@@ -114,7 +101,7 @@ service /repository on new http:Listener(9090) {
                 }
                 xml modulesXml = xml:concat(...moduleEntries);
 
-                xml versionEntry = xml `<version>
+                xml versionEntry = xml `<Bversion>
                     <number>${version}</number>
                     <platform>${versionMetadata.platform}</platform>
                     <languageSpecificationVersion>${versionMetadata.languageSpecificationVersion}</languageSpecificationVersion>
@@ -124,16 +111,14 @@ service /repository on new http:Listener(9090) {
                     <balToolId>${versionMetadata.balToolId}</balToolId>
                     <graalvmCompatible>${versionMetadata.graalvmCompatible}</graalvmCompatible>
                     <modules>${modulesXml}</modules>
-                </version>`;
+                </Bversion>`;
                 versionEntries.push(versionEntry);
             }
             xml versionsXml = xml:concat(...versionEntries);
             xml metadata = xml `<metadata>
                                 <groupId>${org}</groupId>
                                 <artifactId>${package}</artifactId>
-                                <versioning>
-                                    <versions>${versionsXml}</versions>
-                                </versioning>
+                                    <Bversions>${versionsXml}</Bversions>
                             </metadata>`;
 
             http:Response response = new;

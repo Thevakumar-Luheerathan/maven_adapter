@@ -348,6 +348,8 @@ public type PackageJsonSchema record {
     string name;
     string version;
     string summary;
+    int createdDate;
+    string[] authors;
 };
 
 public type ModuleResolutionResponseSchema_resolvedModules record {

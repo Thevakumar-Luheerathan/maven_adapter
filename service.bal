@@ -140,12 +140,15 @@ service /repository on new http:Listener(9090) {
             xml[] packageEntries = [];
             PackageJsonSchema[]? packages = searchResult.packages;
             if packages is PackageJsonSchema[] {
+
                 foreach PackageJsonSchema package in packages {
                     xml packageEntry = xml `<package>
                     <org>${package.organization}</org>
                     <name>${package.name}</name>
                     <version>${package.version}</version>
-                    <description>${package.summary}</description>
+                    <summary>${package.summary}</summary>
+                    <createdDate>${package.createdDate}</createdDate>
+                    <authors>${xml:concat(...package.authors.map(a => xml `<author>${a}</author>`))}</authors>
                 </package>`;
                     packageEntries.push(packageEntry);
                 }
@@ -156,6 +159,9 @@ service /repository on new http:Listener(9090) {
                         <groupId>__packagesearch__</groupId>
                         <artifactId>${pkgQuery}</artifactId>
                         <packages>${packagesXml}</packages>
+                        <count>${searchResult.count ?: 0}</count>
+                        <limit>${searchResult.'limit ?: 0}</limit>
+                        <offset>${searchResult.offset ?: 0}</offset>
                     </metadata>`;
             http:Response response = new;
             response.setXmlPayload(metadata);

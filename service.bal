@@ -1,9 +1,8 @@
+import ballerina/constraint;
 import ballerina/file;
 import ballerina/http;
 import ballerina/io;
 import ballerina/log;
-import ballerina/constraint;
-
 
 @constraint:String {
     pattern: {
@@ -89,20 +88,23 @@ service /repository on new http:Listener(9090) {
     resource function get [string org]/[string package]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Requesting the package metadata for org:${org} package:${package}`);
-            string[] versions = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
+            http:Response centralResponse = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
             xml[] versionEntries = [];
-            foreach string version in versions {
-                PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[package]/[version];
-                xml[] moduleEntries = [];
-                foreach ModuleInfo moduleInfo in versionMetadata.modules {
-                    xml moduleEntry = xml `<module>
-                <name>${moduleInfo.name}</name>
-            </module>`;
-                    moduleEntries.push(moduleEntry);
-                }
-                xml modulesXml = xml:concat(...moduleEntries);
+            if centralResponse.statusCode == 200 {
+                json responseJson = check centralResponse.getJsonPayload();
+                string[] versions = check responseJson.cloneWithType();
+                foreach string version in versions {
+                    PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[package]/[version];
+                    xml[] moduleEntries = [];
+                    foreach ModuleInfo moduleInfo in versionMetadata.modules {
+                        xml moduleEntry = xml `<module>
+                                                    <name>${moduleInfo.name}</name>
+                                                </module>`;
+                        moduleEntries.push(moduleEntry);
+                    }
+                    xml modulesXml = xml:concat(...moduleEntries);
 
-                xml versionEntry = xml `<Bversion>
+                    xml versionEntry = xml `<Bversion>
                     <number>${version}</number>
                     <platform>${versionMetadata.platform}</platform>
                     <languageSpecificationVersion>${versionMetadata.languageSpecificationVersion}</languageSpecificationVersion>
@@ -113,7 +115,8 @@ service /repository on new http:Listener(9090) {
                     <graalvmCompatible>${versionMetadata.graalvmCompatible}</graalvmCompatible>
                     <modules>${modulesXml}</modules>
                 </Bversion>`;
-                versionEntries.push(versionEntry);
+                    versionEntries.push(versionEntry);
+                }
             }
             xml versionsXml = xml:concat(...versionEntries);
             xml metadata = xml `<metadata>
@@ -121,7 +124,6 @@ service /repository on new http:Listener(9090) {
                                 <artifactId>${package}</artifactId>
                                     <Bversions>${versionsXml}</Bversions>
                             </metadata>`;
-
             http:Response response = new;
             response.setXmlPayload(metadata);
             response.setHeader("Content-Type", "application/xml");
@@ -136,7 +138,7 @@ service /repository on new http:Listener(9090) {
         do {
             log:printInfo(string `Searching the package metadata for query:${pkgQuery}`);
             inline_response_200 searchResult = check self.centralApiClient->/packages.get(q = getEncodedUri(pkgQuery));
-            
+
             xml[] packageEntries = [];
             PackageJsonSchema[]? packages = searchResult.packages;
             if packages is PackageJsonSchema[] {
@@ -154,7 +156,7 @@ service /repository on new http:Listener(9090) {
                 }
             }
             xml packagesXml = xml:concat(...packageEntries);
-            
+
             xml metadata = xml `<metadata>
                         <groupId>__packagesearch__</groupId>
                         <artifactId>${pkgQuery}</artifactId>
@@ -242,7 +244,7 @@ service /repository on new http:Listener(9090) {
 
     isolated function getDependencyGraph(string org, string package, string ver) returns http:Response|error {
         log:printInfo(string `Requesting the dependency graph for org:${org} package:${package} version:${ver}`);
-        http:Response centralResponse = check self.centralApiClient->/packages/resolve\-dependencies.post( {
+        http:Response centralResponse = check self.centralApiClient->/packages/resolve\-dependencies.post({
             packages: [
                 {
                     org: org,
@@ -255,5 +257,4 @@ service /repository on new http:Listener(9090) {
         return centralResponse;
     }
 }
-
 

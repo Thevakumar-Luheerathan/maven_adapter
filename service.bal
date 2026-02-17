@@ -175,17 +175,87 @@ service /repository on new http:Listener(9090) {
         }
     }
 
-    resource function get __toolesearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+    resource function get __packagesearchsolr__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
-            // TODO: Generate actual maven-metadata.xml content based on org and package
-            xml metadata = check io:fileReadXml("resources/mvn-meta-tool-search.xml");
+            log:printInfo(string `Searching the package metadata for query:${pkgQuery}`);
+            PackageSearchSolrResult pkgSolrResult = check self.centralApiClient->get("/search-packages?" + pkgQuery);
+            xml[] packageEntries = [];
+            Package[]? packages = pkgSolrResult.packages;
+            if packages is Package[] {
+                foreach Package package in packages {
+                    xml packageEntry = xml `<package>
+                        <id>${package.id}</id>
+                        <org>${package.organization}</org>
+                        <name>${package.name}</name>
+                        <version>${package.version}</version>
+                        <summary>${package.summary}</summary>
+                        <createdDate>${package.createdDate}</createdDate>
+                        <authors>${xml:concat(...package.authors.map(a => xml `<author>${a}</author>`))}</authors>
+                        <balToolId>${package.balToolId ?: ""}</balToolId>
+                        <keywords>${xml:concat(...package.keywords.map(k => xml `<keyword>${k}</keyword>`))}</keywords>
+                        <pullCount>${package.pullCount}</pullCount>
+                    </package>`;
+                    packageEntries.push(packageEntry);
+                }
+            }
+            xml packagesXml = xml:concat(...packageEntries);
+
+            xml metadata = xml `<metadata>
+                <groupId>__packagesearchsolr__</groupId>
+                <artifactId>${pkgQuery}</artifactId>
+                    <packages>${packagesXml}</packages>
+                    <count>${pkgSolrResult.count}</count>
+                    <limit>${pkgSolrResult.'limit}</limit>
+                    <offset>${pkgSolrResult.offset}</offset>
+            </metadata>`;
             http:Response response = new;
             response.setXmlPayload(metadata);
             response.setHeader("Content-Type", "application/xml");
             return response;
         } on fail error err {
-            log:printError(string `Error occured while getting the tool for the query:${pkgQuery} reason:${err.message()}`);
-            return {body: string `Error occured while getting the tool for the query:${pkgQuery}`};
+            log:printError(string `Error occured while searching the package for the query:${pkgQuery} reason:${err.message()}`);
+            return {body: string `Error occured while searching the package for the query:${pkgQuery}`};
+        }
+    }
+
+    resource function get __toolsearch__/[string toolQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+        do {
+            log:printInfo(string `Searching the package metadata for query:${toolQuery}`);
+            inline_response_200_4 searchResult = check self.centralApiClient->/tools.get(q = getEncodedUri(toolQuery));
+
+            xml[] packageEntries = [];
+            PackageJsonSchema[]? tools = searchResult.tools;
+            if tools is PackageJsonSchema[] {
+
+                foreach PackageJsonSchema tool in tools {
+                    xml packageEntry = xml `<package>
+                    <org>${tool.organization}</org>
+                    <name>${tool.name}</name>
+                    <version>${tool.version}</version>
+                    <summary>${tool.summary}</summary>
+                    <createdDate>${tool.createdDate}</createdDate>
+                    <balToolId>${tool.balToolId ?: ""}</balToolId>
+                </package>`;
+                    packageEntries.push(packageEntry);
+                }
+            }
+            xml packagesXml = xml:concat(...packageEntries);
+
+            xml metadata = xml `<metadata>
+                        <groupId>__packagesearch__</groupId>
+                        <artifactId>${toolQuery}</artifactId>
+                        <packages>${packagesXml}</packages>
+                        <count>${searchResult.count ?: 0}</count>
+                        <limit>${searchResult.'limit ?: 0}</limit>
+                        <offset>${searchResult.offset ?: 0}</offset>
+                    </metadata>`;
+            http:Response response = new;
+            response.setXmlPayload(metadata);
+            response.setHeader("Content-Type", "application/xml");
+            return response;
+        } on fail error err {
+            log:printError(string `Error occured while searching the package for the query:${toolQuery} reason:${err.message()}`);
+            return {body: string `Error occured while searching the package for the query:${toolQuery}`};
         }
     }
 
@@ -205,11 +275,16 @@ service /repository on new http:Listener(9090) {
 
     resource function get __tools__/[string toolId]/[string version]/[string balafile]() returns http:Response|http:InternalServerError {
         do {
-            xml metadata = check io:fileReadXml("resources/mvn-meta-tool-search.xml");
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
+            log:printInfo(string `Requesting the tool toolId:${toolId} version:${version}`);
+            http:Response centralResponse = check self.centralApiClient->/tools/[toolId]/[version];
+            if centralResponse.statusCode != 200 {
+                check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
+            }
+            json jsonPayload = check centralResponse.getJsonPayload();
+            string filePath = check jsonPayload.balaURL;
+            http:Client fileServer = check new (filePath);
+            http:Response downloadResponse = check fileServer->get("");
+            return downloadResponse;
         } on fail error err {
             log:printError(string `Error occured while getting tool file for toolId:${toolId} version:${version} reason:${err.message()}`);
             return {body: string `Error occured while getting tool file for toolId:${toolId} version:${version}`};

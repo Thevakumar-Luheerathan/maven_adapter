@@ -350,6 +350,7 @@ public type PackageJsonSchema record {
     string summary;
     int createdDate;
     string[] authors;
+    string balToolId?;
 };
 
 public type ModuleResolutionResponseSchema_resolvedModules record {
@@ -518,3 +519,38 @@ public type GetTriggersQueries record {
     # Search by keywords.
     string keyword?;
 };
+
+public type PackageSearchSolrResult record {
+    Package[] packages;
+    int count;
+    int 'limit;
+    int offset;
+};
+
+
+public type Package record {
+    int id;
+    string organization;
+    string name;
+    string version;
+    string summary;
+    int createdDate;
+    string[] authors;
+    string balToolId?;
+    string[] keywords = [];
+    int pullCount;
+};
+
+public type SolrSpellCheckItem record {|
+    int numFound = 0;
+    int startOffset = 0;
+    int endOffset = 0;
+    string[] suggestion = [];
+|};
+
+public type SolrHighlightedItem record {|
+    string[] summary = [];
+    string[] keywords = [];
+|};
+
+

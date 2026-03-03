@@ -99,19 +99,109 @@ service /repository on new http:Listener(9090) {
 
     resource function get __symbolsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
+            log:printInfo(string `Searching the symbols for query:${pkgQuery}`);
             SymbolResponse symbolResponse = check self.centralApiClient->get("/search-symbols?" + pkgQuery);
+            xml[] symbolEntries = [];
+            Symbol[]? symbols = symbolResponse.symbols;
+            if symbols is Symbol[] {
+                foreach Symbol symbol in symbols {
+                    xml symbolEntry = xml `<symbol>
+                        <id>${symbol.id}</id>
+                        <packageID>${symbol.packageID}</packageID>
+                        <name>${symbol.name}</name>
+                        <org>${symbol.organization}</org>
+                        <version>${symbol.version}</version>
+                        <createdDate>${symbol.createdDate}</createdDate>
+                        <icon>${symbol.icon}</icon>
+                        <symbolType>${symbol.symbolType}</symbolType>
+                        <symbolParent>${symbol.symbolParent}</symbolParent>
+                        <symbolName>${symbol.symbolName}</symbolName>
+                        <description>${symbol.description}</description>
+                        <symbolSignature>${symbol.symbolSignature}</symbolSignature>
+                        <isIsolated>${symbol.isIsolated}</isIsolated>
+                        <isRemote>${symbol.isRemote}</isRemote>
+                        <isResource>${symbol.isResource}</isResource>
+                        <isClosed>${symbol.isClosed}</isClosed>
+                        <isDistinct>${symbol.isDistinct}</isDistinct>
+                        <isReadOnly>${symbol.isReadOnly}</isReadOnly>
+                    </symbol>`;
+                    symbolEntries.push(symbolEntry);
+                }
+            }
+            xml symbolsXml = xml:concat(...symbolEntries);
 
-
+            xml metadata = xml `<metadata>
+                <groupId>__symbolsearch__</groupId>
+                <artifactId>${pkgQuery}</artifactId>
+                <symbols>${symbolsXml}</symbols>
+                <count>${symbolResponse.count}</count>
+                <limit>${symbolResponse.'limit}</limit>
+                <offset>${symbolResponse.offset}</offset>
+            </metadata>`;
+            http:Response response = new;
+            response.setXmlPayload(metadata);
+            response.setHeader("Content-Type", "application/xml");
+            return response;
         } on fail error err {
-
+            log:printError(string `Error occured while searching symbols for the query:${pkgQuery} reason:${err.message()}`);
+            return {body: string `Error occured while searching symbols for the query:${pkgQuery}`};
         }
     }
 
     resource function get __connectorsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
+            log:printInfo(string `Searching the connectors for query:${pkgQuery}`);
+            inline_response_200_2 connectorResult = check self.centralApiClient->get("/connectors?" + pkgQuery);
+            xml[] connectorEntries = [];
+            ConnectorsResultSchema[]? connectors = connectorResult.connectors;
+            if connectors is ConnectorsResultSchema[] {
+                foreach ConnectorsResultSchema connector in connectors {
+                    xml[] functionEntries = [];
+                    FunctionJsonSchema[]? functions = connector.functions;
+                    if functions is FunctionJsonSchema[] {
+                        foreach FunctionJsonSchema func in functions {
+                            xml functionEntry = xml `<function>
+                                <isRemote>${func.isRemote}</isRemote>
+                                <documentation>${func.documentation ?: ""}</documentation>
+                                <returnType>${func.returnType ?: ""}</returnType>
+                            </function>`;
+                            functionEntries.push(functionEntry);
+                        }
+                    }
+                    xml functionsXml = xml:concat(...functionEntries);
 
+                    xml connectorEntry = xml `<connector>
+                        <id>${connector.id}</id>
+                        <name>${connector.name}</name>
+                        <org>${connector.package.organization}</org>
+                        <packageName>${connector.package.name}</packageName>
+                        <version>${connector.package.version}</version>
+                        <summary>${connector.package.summary}</summary>
+                        <createdDate>${connector.package.createdDate}</createdDate>
+                        <documentation>${connector.documentation ?: ""}</documentation>
+                        <moduleName>${connector.moduleName ?: ""}</moduleName>
+                        <functions>${functionsXml}</functions>
+                    </connector>`;
+                    connectorEntries.push(connectorEntry);
+                }
+            }
+            xml connectorsXml = xml:concat(...connectorEntries);
+
+            xml metadata = xml `<metadata>
+                <groupId>__connectorsearch__</groupId>
+                <artifactId>${pkgQuery}</artifactId>
+                <connectors>${connectorsXml}</connectors>
+                <count>${connectorResult.count ?: 0}</count>
+                <limit>${connectorResult.'limit ?: 0}</limit>
+                <offset>${connectorResult.offset ?: 0}</offset>
+            </metadata>`;
+            http:Response response = new;
+            response.setXmlPayload(metadata);
+            response.setHeader("Content-Type", "application/xml");
+            return response;
         } on fail error err {
-
+            log:printError(string `Error occured while searching connectors for the query:${pkgQuery} reason:${err.message()}`);
+            return {body: string `Error occured while searching connectors for the query:${pkgQuery}`};
         }
     }
 

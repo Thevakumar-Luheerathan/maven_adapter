@@ -1,23 +1,7 @@
-import ballerina/constraint;
-import ballerina/file;
 import ballerina/http;
 import ballerina/io;
 import ballerina/log;
 
-@constraint:String {
-    pattern: {
-        value: re `.*-depgraph\.json`,
-        message: "File name must end with -depgraph.json"
-    }
-}
-type DepGraphFile string;
-
-@constraint:String {
-    pattern: {
-        value: re `.*\.bala`,
-        message: "File name must end with -depgraph.json"
-    }
-}
 type BalaFile string;
 
 service /repository on new http:Listener(9090) {
@@ -29,115 +13,10 @@ service /repository on new http:Listener(9090) {
         self.centralApiClient = check new (self.serviceUrl, self.httpClientConfig);
     }
 
-    // resource function get [string org]/[string package]/[string version]/[DepGraphFile depGraphFile]() returns http:Response|http:InternalServerError {
-    //     do {
-
-    //     } on fail error err {
-    //         log:printError(string `Error occured while getting dependency graph for org:${org} package:${package} version:${version} reason:${err.message()}`);
-    //         return {body: string `Error occured while getting dependency graph for org:${org} package:${package} version:${version}`};
-    //     }
-    // }
-
-    resource function get [string org]/[string package]/[string version]/package\.json() returns http:Response|http:InternalServerError {
-        do {
-            log:printInfo(string `Requesting the package json for org:${org} package:${package} version:${version}`);
-            http:Response centralResponse = check self.centralApiClient->/packages/[org]/[package]/[version]({
-                "Accept-Encoding": "identity",
-                "Accept": "application/octet-stream"
-            });
-            if centralResponse.statusCode != 302 {
-                check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
-            }
-            string filePath = check centralResponse.getHeader("Location");
-            http:Client fileServer = check new (filePath);
-            http:Response downloadResponse = check fileServer->get("");
-
-            string tempBalaDir = check file:createTempDir();
-            string tempBalaFile = check file:joinPath(tempBalaDir, "temp.bala");
-            stream<byte[], io:Error?> byteStream = check downloadResponse.getByteStream();
-            io:Error? writeResult = io:fileWriteBlocksFromStream(tempBalaFile, byteStream);
-            if writeResult is io:Error {
-                check error(string `Failed to write the downloaded bala file to disk`);
-            }
-            check byteStream.close();
-            json packageJson = check getPackageJsonFromBala(tempBalaDir, tempBalaFile);
-            http:Response response = new;
-            response.setJsonPayload(packageJson);
-            response.setHeader("Content-Type", "application/json");
-            return response;
-        } on fail error err {
-            log:printError(string `Error occured while getting package json for org:${org} package:${package} version:${version} reason:${err.message()}`);
-            return {body: string `Error occured while getting package json for org:${org} package:${package} version:${version}`};
-        }
-    }
-
-    isolated resource function get [string org]/[string package]/[string ver]/[string file]() returns http:Response|http:InternalServerError {
-        do {
-            if file.endsWith(".bala") {
-                return check self.getBalaFile(org, package, ver);
-            } else if (file.endsWith("-depgraph.json")) {
-                return check self.getDependencyGraph(org, package, ver);
-            }
-            return {body: string `Requested file ${file} is not supported. Only .bala and -depgraph.json files are supported.`};
-        } on fail error err {
-            log:printError(string `Error occured while pulling the artifact org:${org} package:${package} version:${ver} reason:${err.message()}`);
-            return {body: string `Error occured while pulling the artifact org:${org} package:${package} version:${ver}`};
-        }
-    }
-
-    resource function get [string org]/[string package]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
-        do {
-            log:printInfo(string `Requesting the package metadata for org:${org} package:${package}`);
-            http:Response centralResponse = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
-            xml[] versionEntries = [];
-            if centralResponse.statusCode == 200 {
-                json responseJson = check centralResponse.getJsonPayload();
-                string[] versions = check responseJson.cloneWithType();
-                foreach string version in versions {
-                    PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[package]/[version];
-                    xml[] moduleEntries = [];
-                    foreach ModuleInfo moduleInfo in versionMetadata.modules {
-                        xml moduleEntry = xml `<module>
-                                                    <name>${moduleInfo.name}</name>
-                                                </module>`;
-                        moduleEntries.push(moduleEntry);
-                    }
-                    xml modulesXml = xml:concat(...moduleEntries);
-
-                    xml versionEntry = xml `<Bversion>
-                    <number>${version}</number>
-                    <platform>${versionMetadata.platform}</platform>
-                    <languageSpecificationVersion>${versionMetadata.languageSpecificationVersion}</languageSpecificationVersion>
-                    <isDeprecated>${versionMetadata.isDeprecated.toString()}</isDeprecated>
-                    <deprecateMessage>${versionMetadata.deprecateMessage}</deprecateMessage>
-                    <ballerinaVersion>${versionMetadata.ballerinaVersion}</ballerinaVersion>
-                    <balToolId>${versionMetadata.balToolId}</balToolId>
-                    <graalvmCompatible>${versionMetadata.graalvmCompatible}</graalvmCompatible>
-                    <modules>${modulesXml}</modules>
-                </Bversion>`;
-                    versionEntries.push(versionEntry);
-                }
-            }
-            xml versionsXml = xml:concat(...versionEntries);
-            xml metadata = xml `<metadata>
-                                <groupId>${org}</groupId>
-                                <artifactId>${package}</artifactId>
-                                    <Bversions>${versionsXml}</Bversions>
-                            </metadata>`;
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
-        } on fail error err {
-            log:printError(string `Error occured while getting package metadata for org:${org} package:${package} reason:${err.message()}`);
-            return {body: string `Error occured while getting package metadata for org:${org} package:${package}`};
-        }
-    }
-
     resource function get __packagesearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${pkgQuery}`);
-            inline_response_200 searchResult = check self.centralApiClient->/packages.get(q = getEncodedUri(pkgQuery));
+            inline_response_200 searchResult = check self.centralApiClient->get("/packages?" + pkgQuery);
 
             xml[] packageEntries = [];
             PackageJsonSchema[]? packages = searchResult.packages;
@@ -218,6 +97,56 @@ service /repository on new http:Listener(9090) {
         }
     }
 
+    resource function get __symbolsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+        do {
+            SymbolResponse symbolResponse = check self.centralApiClient->get("/search-symbols?" + pkgQuery);
+
+
+        } on fail error err {
+
+        }
+    }
+
+    resource function get __connectorsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+        do {
+
+        } on fail error err {
+
+        }
+    }
+
+    resource function get __tools__/[string toolId]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+        do {
+            // TODO: Generate actual maven-metadata.xml content based on org and package
+            xml metadata = check io:fileReadXml("resources/mvn-meta-tool-search.xml");
+            http:Response response = new;
+            response.setXmlPayload(metadata);
+            response.setHeader("Content-Type", "application/xml");
+            return response;
+        } on fail error err {
+            log:printError(string `Error occured while getting tool metadata for toolId:${toolId} reason:${err.message()}`);
+            return {body: string `Error occured while getting tool metadata for toolId:${toolId}`};
+        }
+    }
+
+    resource function get __tools__/[string toolId]/[string version]/[string balafile]() returns http:Response|http:InternalServerError {
+        do {
+            log:printInfo(string `Requesting the tool toolId:${toolId} version:${version}`);
+            http:Response centralResponse = check self.centralApiClient->/tools/[toolId]/[version];
+            if centralResponse.statusCode != 200 {
+                check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
+            }
+            json jsonPayload = check centralResponse.getJsonPayload();
+            string filePath = check jsonPayload.balaURL;
+            http:Client fileServer = check new (filePath);
+            http:Response downloadResponse = check fileServer->get("");
+            return downloadResponse;
+        } on fail error err {
+            log:printError(string `Error occured while getting tool file for toolId:${toolId} version:${version} reason:${err.message()}`);
+            return {body: string `Error occured while getting tool file for toolId:${toolId} version:${version}`};
+        }
+    }
+
     resource function get __toolsearch__/[string toolQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${toolQuery}`);
@@ -259,35 +188,76 @@ service /repository on new http:Listener(9090) {
         }
     }
 
-    resource function get __tools__/[string toolId]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+    isolated resource function get __function__/[string org]/[string package]/[string ver]/[string functionname]() returns http:Response|http:InternalServerError {
         do {
-            // TODO: Generate actual maven-metadata.xml content based on org and package
-            xml metadata = check io:fileReadXml("resources/mvn-meta-tool-search.xml");
+            //TODO: Generate actual function metadata content based on org, package and version
+            return check self.getDependencyGraph(org, package, ver);
+        } on fail error err {
+            log:printError(string `Error occured while pulling the artifact org:${org} package:${package} version:${ver} reason:${err.message()}`);
+            return {body: string `Error occured while pulling the artifact org:${org} package:${package} version:${ver}`};
+        }
+    }
+
+    isolated resource function get [string org]/[string package]/[string ver]/[string file]() returns http:Response|http:InternalServerError {
+        do {
+            if file.endsWith(".bala") {
+                return check self.getBalaFile(org, package, ver);
+            } else if (file.endsWith("-depgraph.json")) {
+                return check self.getDependencyGraph(org, package, ver);
+            }
+            return {body: string `Requested file ${file} is not supported. Only .bala and -depgraph.json files are supported.`};
+        } on fail error err {
+            log:printError(string `Error occured while pulling the artifact org:${org} package:${package} version:${ver} reason:${err.message()}`);
+            return {body: string `Error occured while pulling the artifact org:${org} package:${package} version:${ver}`};
+        }
+    }
+
+    resource function get [string org]/[string package]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+        do {
+            log:printInfo(string `Requesting the package metadata for org:${org} package:${package}`);
+            http:Response centralResponse = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
+            xml[] versionEntries = [];
+            if centralResponse.statusCode == 200 {
+                json responseJson = check centralResponse.getJsonPayload();
+                string[] versions = check responseJson.cloneWithType();
+                foreach string version in versions {
+                    PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[package]/[version];
+                    xml[] moduleEntries = [];
+                    foreach ModuleInfo moduleInfo in versionMetadata.modules {
+                        xml moduleEntry = xml `<module>
+                                                    <name>${moduleInfo.name}</name>
+                                                </module>`;
+                        moduleEntries.push(moduleEntry);
+                    }
+                    xml modulesXml = xml:concat(...moduleEntries);
+
+                    xml versionEntry = xml `<Bversion>
+                    <number>${version}</number>
+                    <platform>${versionMetadata.platform}</platform>
+                    <languageSpecificationVersion>${versionMetadata.languageSpecificationVersion}</languageSpecificationVersion>
+                    <isDeprecated>${versionMetadata.isDeprecated.toString()}</isDeprecated>
+                    <deprecateMessage>${versionMetadata.deprecateMessage}</deprecateMessage>
+                    <ballerinaVersion>${versionMetadata.ballerinaVersion}</ballerinaVersion>
+                    <balToolId>${versionMetadata.balToolId}</balToolId>
+                    <graalvmCompatible>${versionMetadata.graalvmCompatible}</graalvmCompatible>
+                    <modules>${modulesXml}</modules>
+                </Bversion>`;
+                    versionEntries.push(versionEntry);
+                }
+            }
+            xml versionsXml = xml:concat(...versionEntries);
+            xml metadata = xml `<metadata>
+                                <groupId>${org}</groupId>
+                                <artifactId>${package}</artifactId>
+                                    <Bversions>${versionsXml}</Bversions>
+                            </metadata>`;
             http:Response response = new;
             response.setXmlPayload(metadata);
             response.setHeader("Content-Type", "application/xml");
             return response;
         } on fail error err {
-            log:printError(string `Error occured while getting tool metadata for toolId:${toolId} reason:${err.message()}`);
-            return {body: string `Error occured while getting tool metadata for toolId:${toolId}`};
-        }
-    }
-
-    resource function get __tools__/[string toolId]/[string version]/[string balafile]() returns http:Response|http:InternalServerError {
-        do {
-            log:printInfo(string `Requesting the tool toolId:${toolId} version:${version}`);
-            http:Response centralResponse = check self.centralApiClient->/tools/[toolId]/[version];
-            if centralResponse.statusCode != 200 {
-                check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
-            }
-            json jsonPayload = check centralResponse.getJsonPayload();
-            string filePath = check jsonPayload.balaURL;
-            http:Client fileServer = check new (filePath);
-            http:Response downloadResponse = check fileServer->get("");
-            return downloadResponse;
-        } on fail error err {
-            log:printError(string `Error occured while getting tool file for toolId:${toolId} version:${version} reason:${err.message()}`);
-            return {body: string `Error occured while getting tool file for toolId:${toolId} version:${version}`};
+            log:printError(string `Error occured while getting package metadata for org:${org} package:${package} reason:${err.message()}`);
+            return {body: string `Error occured while getting package metadata for org:${org} package:${package}`};
         }
     }
 

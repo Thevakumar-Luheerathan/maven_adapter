@@ -143,11 +143,44 @@ public type ToolDependencyResponse record {
 public type ConnectorsResultSchema record {
     int id;
     string name;
-    PackageJsonSchema package;
-    FunctionJsonSchema[] functions?;
-    string documentation?;
+    string displayName?;
     string moduleName?;
-    record {} displayAnnotation;
+    FunctionJsonSchema[]? functions;
+    record {} displayAnnotation?;
+    ConnectorPackageSchema package;
+    string icon?;
+    string documentation?;
+};
+
+public type ConnectorPackageSchema record {
+    int id;
+    string organization;
+    string name;
+    string version;
+    string platform;
+    string languageSpecificationVersion;
+    boolean isDeprecated;
+    string deprecateMessage;
+    string URL;
+    string balaVersion;
+    string balaURL;
+    string digest;
+    string summary;
+    string readme;
+    boolean template;
+    string[] licenses;
+    string[] authors;
+    string sourceCodeLocation;
+    string[] keywords;
+    string ballerinaVersion;
+    string icon;
+    string ownerUUID;
+    int createdDate;
+    int pullCount;
+    string visibility;
+    ModuleInfo[] modules;
+    string balToolId;
+    string graalvmCompatible;
 };
 
 public type ModuleResolutionRequestSchema_modules record {
@@ -268,10 +301,10 @@ public type inline_response_200_1 record {
 };
 
 public type inline_response_200_2 record {
-    ConnectorsResultSchema[] connectors?;
-    int count?;
-    int 'limit?;
-    int offset?;
+    ConnectorsResultSchema[]? connectors;
+    int count;
+    int 'limit;
+    int offset;
 };
 
 public type ResolvedTools record {

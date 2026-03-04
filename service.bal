@@ -170,17 +170,62 @@ service /repository on new http:Listener(9090) {
                     }
                     xml functionsXml = xml:concat(...functionEntries);
 
+                    ConnectorPackageSchema connectorPackage = connector.package;
+                    xml[] keywordEntries = [];
+                    foreach string keyword in connectorPackage.keywords {
+                        keywordEntries.push(xml `<keyword>${keyword}</keyword>`);
+                    }
+                    xml keywordsXml = xml:concat(...keywordEntries);
+
+                    xml[] authorEntries = [];
+                    foreach string author in connectorPackage.authors {
+                        authorEntries.push(xml `<author>${author}</author>`);
+                    }
+                    xml authorsXml = xml:concat(...authorEntries);
+
+                    xml[] licenseEntries = [];
+                    foreach string license in connectorPackage.licenses {
+                        licenseEntries.push(xml `<license>${license}</license>`);
+                    }
+                    xml licensesXml = xml:concat(...licenseEntries);
+
                     xml connectorEntry = xml `<connector>
                         <id>${connector.id}</id>
                         <name>${connector.name}</name>
-                        <org>${connector.package.organization}</org>
-                        <packageName>${connector.package.name}</packageName>
-                        <version>${connector.package.version}</version>
-                        <summary>${connector.package.summary}</summary>
-                        <createdDate>${connector.package.createdDate}</createdDate>
-                        <documentation>${connector.documentation ?: ""}</documentation>
+                        <displayName>${connector.displayName ?: ""}</displayName>
                         <moduleName>${connector.moduleName ?: ""}</moduleName>
+                        <icon>${connector.icon ?: ""}</icon>
+                        <documentation>${connector.documentation ?: ""}</documentation>
                         <functions>${functionsXml}</functions>
+                        <package>
+                            <id>${connectorPackage.id}</id>
+                            <organization>${connectorPackage.organization}</organization>
+                            <name>${connectorPackage.name}</name>
+                            <version>${connectorPackage.version}</version>
+                            <platform>${connectorPackage.platform}</platform>
+                            <languageSpecificationVersion>${connectorPackage.languageSpecificationVersion}</languageSpecificationVersion>
+                            <isDeprecated>${connectorPackage.isDeprecated}</isDeprecated>
+                            <deprecateMessage>${connectorPackage.deprecateMessage}</deprecateMessage>
+                            <URL>${connectorPackage.URL}</URL>
+                            <balaVersion>${connectorPackage.balaVersion}</balaVersion>
+                            <balaURL>${connectorPackage.balaURL}</balaURL>
+                            <digest>${connectorPackage.digest}</digest>
+                            <summary>${connectorPackage.summary}</summary>
+                            <readme>${connectorPackage.readme}</readme>
+                            <template>${connectorPackage.template}</template>
+                            <licenses>${licensesXml}</licenses>
+                            <authors>${authorsXml}</authors>
+                            <sourceCodeLocation>${connectorPackage.sourceCodeLocation}</sourceCodeLocation>
+                            <keywords>${keywordsXml}</keywords>
+                            <ballerinaVersion>${connectorPackage.ballerinaVersion}</ballerinaVersion>
+                            <icon>${connectorPackage.icon}</icon>
+                            <ownerUUID>${connectorPackage.ownerUUID}</ownerUUID>
+                            <createdDate>${connectorPackage.createdDate}</createdDate>
+                            <pullCount>${connectorPackage.pullCount}</pullCount>
+                            <visibility>${connectorPackage.visibility}</visibility>
+                            <balToolId>${connectorPackage.balToolId}</balToolId>
+                            <graalvmCompatible>${connectorPackage.graalvmCompatible}</graalvmCompatible>
+                        </package>
                     </connector>`;
                     connectorEntries.push(connectorEntry);
                 }
@@ -191,9 +236,9 @@ service /repository on new http:Listener(9090) {
                 <groupId>__connectorsearch__</groupId>
                 <artifactId>${pkgQuery}</artifactId>
                 <connectors>${connectorsXml}</connectors>
-                <count>${connectorResult.count ?: 0}</count>
-                <limit>${connectorResult.'limit ?: 0}</limit>
-                <offset>${connectorResult.offset ?: 0}</offset>
+                <count>${connectorResult.count}</count>
+                <limit>${connectorResult.'limit}</limit>
+                <offset>${connectorResult.offset}</offset>
             </metadata>`;
             http:Response response = new;
             response.setXmlPayload(metadata);

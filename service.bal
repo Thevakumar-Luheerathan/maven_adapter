@@ -1,5 +1,4 @@
 import ballerina/http;
-import ballerina/io;
 import ballerina/log;
 
 type BalaFile string;
@@ -252,8 +251,39 @@ service /repository on new http:Listener(9090) {
 
     resource function get __tools__/[string toolId]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
-            // TODO: Generate actual maven-metadata.xml content based on org and package
-            xml metadata = check io:fileReadXml("resources/mvn-meta-tool-search.xml");
+            log:printInfo(string `Requesting tool metadata for toolId:${toolId}`);
+            ToolMetadata toolMetadata = check self.centralApiClient->/tools/[toolId];
+            string org = toolMetadata.organization;
+            string packageName = toolMetadata.name;
+            
+            log:printInfo(string `Requesting versions for tool org:${org} package:${packageName}`);
+            http:Response centralResponse = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(packageName)].get();
+            xml[] versionEntries = [];
+            
+            if centralResponse.statusCode == 200 {
+                json responseJson = check centralResponse.getJsonPayload();
+                string[] versions = check responseJson.cloneWithType();
+                foreach string version in versions {
+                    PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[packageName]/[version];
+                    
+                    xml versionEntry = xml `<version>
+                        <number>${version}</number>
+                        <platform>${versionMetadata.platform}</platform>
+                        <ballerinaVersion>${versionMetadata.ballerinaVersion}</ballerinaVersion>
+                    </version>`;
+                    versionEntries.push(versionEntry);
+                }
+            }
+            
+            xml versionsXml = xml:concat(...versionEntries);
+            xml metadata = xml `<metadata>
+                <groupId>__tools__</groupId>
+                <artifactId>${toolId}</artifactId>
+                <versions>${versionsXml}</versions>
+                <org>${org}</org>
+                <package>${packageName}</package>
+            </metadata>`;
+            
             http:Response response = new;
             response.setXmlPayload(metadata);
             response.setHeader("Content-Type", "application/xml");
@@ -349,47 +379,7 @@ service /repository on new http:Listener(9090) {
 
     resource function get [string org]/[string package]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
-            log:printInfo(string `Requesting the package metadata for org:${org} package:${package}`);
-            http:Response centralResponse = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
-            xml[] versionEntries = [];
-            if centralResponse.statusCode == 200 {
-                json responseJson = check centralResponse.getJsonPayload();
-                string[] versions = check responseJson.cloneWithType();
-                foreach string version in versions {
-                    PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[package]/[version];
-                    xml[] moduleEntries = [];
-                    foreach ModuleInfo moduleInfo in versionMetadata.modules {
-                        xml moduleEntry = xml `<module>
-                                                    <name>${moduleInfo.name}</name>
-                                                </module>`;
-                        moduleEntries.push(moduleEntry);
-                    }
-                    xml modulesXml = xml:concat(...moduleEntries);
-
-                    xml versionEntry = xml `<Bversion>
-                    <number>${version}</number>
-                    <platform>${versionMetadata.platform}</platform>
-                    <languageSpecificationVersion>${versionMetadata.languageSpecificationVersion}</languageSpecificationVersion>
-                    <isDeprecated>${versionMetadata.isDeprecated.toString()}</isDeprecated>
-                    <deprecateMessage>${versionMetadata.deprecateMessage}</deprecateMessage>
-                    <ballerinaVersion>${versionMetadata.ballerinaVersion}</ballerinaVersion>
-                    <balToolId>${versionMetadata.balToolId}</balToolId>
-                    <graalvmCompatible>${versionMetadata.graalvmCompatible}</graalvmCompatible>
-                    <modules>${modulesXml}</modules>
-                </Bversion>`;
-                    versionEntries.push(versionEntry);
-                }
-            }
-            xml versionsXml = xml:concat(...versionEntries);
-            xml metadata = xml `<metadata>
-                                <groupId>${org}</groupId>
-                                <artifactId>${package}</artifactId>
-                                    <Bversions>${versionsXml}</Bversions>
-                            </metadata>`;
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
+            return check self.getPackageMetadataXml(org, package);
         } on fail error err {
             log:printError(string `Error occured while getting package metadata for org:${org} package:${package} reason:${err.message()}`);
             return {body: string `Error occured while getting package metadata for org:${org} package:${package}`};
@@ -435,6 +425,50 @@ service /repository on new http:Listener(9090) {
             ]
         });
         return centralResponse;
+    }
+
+    isolated function getPackageMetadataXml(string org, string package) returns http:Response|error {
+        log:printInfo(string `Requesting the package metadata for org:${org} package:${package}`);
+        http:Response centralResponse = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
+        xml[] versionEntries = [];
+        if centralResponse.statusCode == 200 {
+            json responseJson = check centralResponse.getJsonPayload();
+            string[] versions = check responseJson.cloneWithType();
+            foreach string version in versions {
+                PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[package]/[version];
+                xml[] moduleEntries = [];
+                foreach ModuleInfo moduleInfo in versionMetadata.modules {
+                    xml moduleEntry = xml `<module>
+                                                <name>${moduleInfo.name}</name>
+                                            </module>`;
+                    moduleEntries.push(moduleEntry);
+                }
+                xml modulesXml = xml:concat(...moduleEntries);
+
+                xml versionEntry = xml `<Bversion>
+                <number>${version}</number>
+                <platform>${versionMetadata.platform}</platform>
+                <languageSpecificationVersion>${versionMetadata.languageSpecificationVersion}</languageSpecificationVersion>
+                <isDeprecated>${versionMetadata.isDeprecated.toString()}</isDeprecated>
+                <deprecateMessage>${versionMetadata.deprecateMessage}</deprecateMessage>
+                <ballerinaVersion>${versionMetadata.ballerinaVersion}</ballerinaVersion>
+                <balToolId>${versionMetadata.balToolId}</balToolId>
+                <graalvmCompatible>${versionMetadata.graalvmCompatible}</graalvmCompatible>
+                <modules>${modulesXml}</modules>
+            </Bversion>`;
+                versionEntries.push(versionEntry);
+            }
+        }
+        xml versionsXml = xml:concat(...versionEntries);
+        xml metadata = xml `<metadata>
+                            <groupId>${org}</groupId>
+                            <artifactId>${package}</artifactId>
+                                <Bversions>${versionsXml}</Bversions>
+                        </metadata>`;
+        http:Response response = new;
+        response.setXmlPayload(metadata);
+        response.setHeader("Content-Type", "application/xml");
+        return response;
     }
 }
 

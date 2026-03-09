@@ -115,6 +115,11 @@ public type PackageMetadata record {
     string graalvmCompatible;
 };
 
+public type ToolMetadata record {
+    string organization;
+    string name;
+};
+
 public type ModuleInfo record {
     string name;
 };

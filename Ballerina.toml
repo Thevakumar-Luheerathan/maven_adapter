@@ -2,7 +2,7 @@
 org = "luheerathan"
 name = "maven_adapter"
 version = "0.1.0"
-distribution = "2201.12.11"
+distribution = "2201.13.1"
 
 [build-options]
 observabilityIncluded = true

@@ -1,109 +1,3 @@
-import ballerina/http;
-
-public type Function record {| 
-    string accessor;
-    string resourcePath;
-    boolean isIsolated;
-    boolean isRemote;
-    boolean isResource;
-    boolean isExtern;
-    Parameter[] parameters;
-    ReturnParameter[] returnParameters;
-    AnnotationAttachment[] annotationAttachments;
-    string name;
-    string description;
-    DescriptionSection[] descriptionSections;
-    boolean isDeprecated;
-    boolean isReadOnly;
-|};
-
-public type Parameter record {| 
-    string defaultValue;
-    AnnotationAttachment[] annotationAttachments;
-    Type 'type;
-    string name;
-    string description;
-    boolean isDeprecated;
-    boolean isReadOnly;
-|};
-
-public type ReturnParameter record {| 
-    Type 'type;
-    string name;
-    string description;
-    boolean isDeprecated;
-    boolean isReadOnly;
-|};
-
-public type AnnotationAttachment record {| 
-    // Add fields if needed
-|};
-
-public type DescriptionSection record {| 
-    // Add fields if needed
-|};
-
-public type Type record {| 
-    string name;
-    string category;
-    boolean isAnonymousUnionType;
-    boolean isInclusion;
-    boolean isArrayType;
-    boolean isNullable;
-    boolean isTuple;
-    boolean isIntersectionType;
-    boolean isParenthesisedType;
-    boolean isTypeDesc;
-    boolean isRestParam;
-    boolean isDeprecated;
-    boolean isPublic;
-    boolean generateUserDefinedTypeLink;
-    Type[] memberTypes;
-    int arrayDimensions;
-    ElementType elementType;
-|};
-
-public type ElementType record {| 
-    string orgName;
-    string moduleName;
-    string version;
-    string name;
-    string category;
-    boolean isAnonymousUnionType;
-    boolean isInclusion;
-    boolean isArrayType;
-    boolean isNullable;
-    boolean isTuple;
-    boolean isIntersectionType;
-    boolean isParenthesisedType;
-    boolean isTypeDesc;
-    boolean isRestParam;
-    boolean isDeprecated;
-    boolean isPublic;
-    boolean generateUserDefinedTypeLink;
-    Type[] memberTypes;
-    int arrayDimensions;
-|};
-public type FunctionsResponse record {| 
-    Data data;
-|};
-
-public type Data record {| 
-    ApiDocs apiDocs;
-|};
-
-public type ApiDocs record {| 
-    DocsData docsData;
-|};
-
-public type DocsData record {| 
-    Module[] modules;
-|};
-
-public type Module record {| 
-    Function[] functions;
-|};
-
 public type PackageMetadata record {
     string platform;
     string languageSpecificationVersion;
@@ -122,27 +16,6 @@ public type ToolMetadata record {
 
 public type ModuleInfo record {
     string name;
-};
-
-public type DependencyResponse record {
-    ResolvedPackage[] packages?;
-};
-
-public type TriggerJsonSchema record {
-    int id;
-    string name;
-    PackageJsonSchema package;
-    ServiceTypeSchema[] serviceTypes?;
-    record {}[] listenerParams?;
-    string listenerProtocol?;
-    string documentation?;
-    string moduleName?;
-    record {} displayAnnotation?;
-};
-
-public type ToolDependencyResponse record {
-    ResolvedTools[] resolved?;
-    ResolveTool[] unresolved?;
 };
 
 public type ConnectorsResultSchema record {
@@ -188,88 +61,6 @@ public type ConnectorPackageSchema record {
     string graalvmCompatible;
 };
 
-public type ModuleResolutionRequestSchema_modules record {
-    string organization;
-    string name?;
-    string version;
-};
-
-public type VersionListJsonSchema string[];
-
-# Represents the Queries record for the operation: resolvePackageDependencies
-public type ResolvePackageDependenciesQueries record {
-    # The number of levels to resolve a dependency and it's transitives.
-    int level = -1;
-};
-
-public type ResolvedPackage record {
-    string org;
-    string name;
-    string version;
-    ResolvedPackage[] dependencies;
-};
-
-# Provides a set of configurations for controlling the behaviours when communicating with a remote HTTP endpoint.
-@display {label: "Connection Config"}
-public type ConnectionConfig record {|
-    # Configurations related to client authentication
-    http:BearerTokenConfig auth;
-    # The HTTP version understood by the client
-    http:HttpVersion httpVersion = http:HTTP_2_0;
-    # Configurations related to HTTP/1.x protocol
-    http:ClientHttp1Settings http1Settings = {};
-    # Configurations related to HTTP/2 protocol
-    http:ClientHttp2Settings http2Settings = {};
-    # The maximum time to wait (in seconds) for a response before closing the connection
-    decimal timeout = 30;
-    # The choice of setting `forwarded`/`x-forwarded` header
-    string forwarded = "disable";
-    # Configurations associated with Redirection
-    http:FollowRedirects followRedirects?;
-    # Configurations associated with request pooling
-    http:PoolConfiguration poolConfig?;
-    # HTTP caching related configurations
-    http:CacheConfig cache = {};
-    # Specifies the way of handling compression (`accept-encoding`) header
-    http:Compression compression = http:COMPRESSION_AUTO;
-    # Configurations associated with the behaviour of the Circuit Breaker
-    http:CircuitBreakerConfig circuitBreaker?;
-    # Configurations associated with retrying
-    http:RetryConfig retryConfig?;
-    # Configurations associated with cookies
-    http:CookieConfig cookieConfig?;
-    # Configurations associated with inbound response size limits
-    http:ResponseLimitConfigs responseLimits = {};
-    # SSL/TLS-related options
-    http:ClientSecureSocket secureSocket?;
-    # Proxy server related options
-    http:ProxyConfig proxy?;
-    # Provides settings related to client socket configuration
-    http:ClientSocketConfig socketConfig = {};
-    # Enables the inbound payload validation functionality which provided by the constraint package. Enabled by default
-    boolean validation = true;
-    # Enables relaxed data binding on the client side. When enabled, `nil` values are treated as optional, 
-    # and absent fields are handled as `nilable` types. Enabled by default.
-    boolean laxDataBinding = true;
-|};
-
-public type TriggersResultSchema record {
-    int id;
-    string name;
-    PackageJsonSchema package;
-    FunctionJsonSchema[] functions?;
-    string moduleName?;
-    record {} displayAnnotation;
-};
-
-public type inline_response_200_5 record {
-    SymbolJsonSchema[] symbols?;
-    int count?;
-    int 'limit?;
-    int offset?;
-};
-
-
 public type FunctionJsonSchema record {
     boolean isRemote;
     string documentation?;
@@ -278,148 +69,25 @@ public type FunctionJsonSchema record {
     record {} displayAnnotation?;
 };
 
-public type inline_response_200_6 record {
-    string[] suggestions?;
-};
-
-public type PackageStatsJsonSchema record {
-    int pullCount?;
-};
-
-# Represents the Queries record for the operation: searchSymbolInSolr
-public type SearchSymbolInSolrQueries record {
-    # Search by a word.
-    string q?;
-    # Offset for the results.
-    int offset?;
-    # The number of packages in the result.
-    int 'limit?;
-    # Filter modules by current user.  An empty array is returned if anonymous user.
-    boolean user\-packages = false;
-    # Sort order.
-    string sort?;
-};
-
-
-public type inline_response_200_1 record {
-    PackageJsonSchema[] packages?;
-};
-
-public type inline_response_200_2 record {
+public type ConnectorSearchResult record {
     ConnectorsResultSchema[]? connectors;
     int count;
     int 'limit;
     int offset;
 };
 
-public type ResolvedTools record {
-    string org;
-    string id;
-    string version;
-};
-
-public type ServiceTypeSchema record {
-    string name;
-    string 'type;
-    string description?;
-    FunctionJsonSchema[] functions?;
-    record {} displayAnnotation?;
-};
-
-public type inline_response_200_4 record {
+public type ToolSearchResult record {
     PackageJsonSchema[] tools?;
     int count?;
     int 'limit?;
     int offset?;
 };
 
-# Represents the Queries record for the operation: searchSuggestions
-public type SearchSuggestionsQueries record {
-    # Package/symbol search mode.
-    string mode?;
-    # Search query.
-    string q?;
-};
-
-# Represents the Queries record for the operation: getPackageValidity
-public type GetPackageValidityQueries record {
-    # The Ballerina version of the package.
-    string balVersion;
-    # The organization name of the package.
-    string organization;
-};
-
-public type ResolveTool record {
-    string id;
-    string version?;
-    "soft"|"medium"|"hard" mode = "medium";
-};
-
-# Represents the Queries record for the operation: searchKeywords
-public type SearchKeywordsQueries record {
-    # Search by keyword names.
-    string names?;
-    # Offset for the results.
-    int offset?;
-    # The number of packages in the result.
-    int 'limit?;
-    # Filter modules by current user.  An empty array is returned if anonymous user.
-    boolean user\-packages = false;
-    # Sort order.
-    string sort?;
-};
-
-# Represents the Queries record for the operation: deletePackage
-public type DeletePackageQueries record {
-    # Force delete a package.
-    boolean force = false;
-};
-
-public type ModuleResolutionRequestSchema record {
-    ModuleResolutionRequestSchema_modules[] modules?;
-};
-
-# Represents the Queries record for the operation: migrateAllPackages
-public type MigrateAllPackagesQueries record {
-    # Batch size for indexing
-    int batch = 200;
-};
-
-public type ConnectorJsonSchema record {
-    int id;
-    string name;
-    PackageJsonSchema package;
-    FunctionJsonSchema[] functions?;
-    string documentation?;
-    string moduleName?;
-    record {} displayAnnotation?;
-};
-
-public type ModuleJsonSchema record {
-    string name;
-    string summary;
-    string readme;
-    # API documentation URL
-    string apiDocURL;
-    boolean executable = false;
-    string packageUrl;
-};
-
-public type inline_response_200 record {
+public type PackageSearchResult record {
     PackageJsonSchema[] packages?;
     int count?;
     int 'limit?;
     int offset?;
-};
-
-public type PackageUpdateRequest record {
-    string[] keywords;
-};
-
-# Represents the Queries record for the operation: indexAllPackages
-public type IndexAllPackagesQueries record {
-    # Batch size for indexing
-    int batch = 200;
 };
 
 public type PackageJsonSchema record {
@@ -430,115 +98,6 @@ public type PackageJsonSchema record {
     int createdDate;
     string[] authors;
     string balToolId?;
-};
-
-public type ModuleResolutionResponseSchema_resolvedModules record {
-    string organization;
-    string name?;
-    string version;
-    string packageName;
-};
-
-# Represents the Queries record for the operation: searchTool
-public type SearchToolQueries record {
-    # Search by ballerina version.
-    string ballerina_version?;
-    # Search by whether a package is a template or not.
-    boolean template?;
-    # Search by a word.
-    string q?;
-    # Search by package name.
-    string package?;
-    # Offset for the results.
-    int offset?;
-    # Search by organization name.
-    string org?;
-    # The number of tools in the result.
-    int 'limit?;
-    # Filter modules by current user.  An empty array is returned if anonymous user.
-    boolean user\-packages = false;
-    # Search by module.md/description.
-    string description?;
-    # Sort order.
-    string sort?;
-    # Search by keywords.
-    string keyword?;
-    # Search by package platform.
-    string platform?;
-};
-
-public type SymbolJsonSchema record {
-    string id;
-    int packageID;
-    string name;
-    string organization;
-    string version;
-    int createdDate;
-    string icon;
-    string symbolType;
-    string symbolParent;
-    string description;
-    string symbolSignature;
-    boolean isRemote;
-    boolean isResource;
-    boolean isClosed;
-    boolean isDistinct;
-    boolean isReadOnly;
-};
-
-# Represents the Queries record for the operation: getConnectors
-public type GetConnectorsQueries record {
-    # Search by ballerina version.
-    string ballerina_version?;
-    # Search by whether a package is a template or not.
-    boolean template?;
-    # Search by package name.
-    string package?;
-    # Offset for the results.
-    int offset?;
-    # Search by organization name.
-    string org?;
-    # Filter modules by current user.  An empty array is returned if anonymous user.
-    boolean user\-packages = false;
-    # Search by module.md/description.
-    string description?;
-    # Sort order.
-    string sort?;
-    # Search by package platform.
-    string platform?;
-    # Search by a word.
-    string q?;
-    # Search by connector name.
-    string connector?;
-    # The number of connectors in the result.
-    int 'limit?;
-    # Search by keywords.
-    string keyword?;
-};
-
-# Represents the Queries record for the operation: indexPackagePullCount
-public type IndexPackagePullCountQueries record {
-    # Batch size for indexing package pull count
-    int batch = 200;
-    # Flag indicating whether to commit the changes immediately
-    boolean 'commit = false;
-};
-
-public type PackageDeprecateRequest record {
-    string message;
-};
-
-# Represents the Queries record for the operation: getPackageVersions
-public type GetPackageVersionsQueries record {
-    # Whether to include pre-release versions in the version list or not.
-    boolean include\-prereleases?;
-};
-
-public type ResolvePackage record {
-    string org;
-    string name;
-    string version?;
-    "soft"|"medium"|"hard" mode = "medium";
 };
 
 
@@ -590,7 +149,3 @@ type SymbolResponse record {
     int offset;
     int 'limit;
 };
-
-
-
-

@@ -15,7 +15,7 @@ service /repository on new http:Listener(9090) {
     resource function get __packagesearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${pkgQuery}`);
-            inline_response_200 searchResult = check self.centralApiClient->get("/packages?" + pkgQuery);
+            PackageSearchResult searchResult = check self.centralApiClient->get("/packages?" + pkgQuery);
 
             xml[] packageEntries = [];
             PackageJsonSchema[]? packages = searchResult.packages;
@@ -150,7 +150,7 @@ service /repository on new http:Listener(9090) {
     resource function get __connectorsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the connectors for query:${pkgQuery}`);
-            inline_response_200_2 connectorResult = check self.centralApiClient->get("/connectors?" + pkgQuery);
+            ConnectorSearchResult connectorResult = check self.centralApiClient->get("/connectors?" + pkgQuery);
             xml[] connectorEntries = [];
             ConnectorsResultSchema[]? connectors = connectorResult.connectors;
             if connectors is ConnectorsResultSchema[] {
@@ -315,7 +315,7 @@ service /repository on new http:Listener(9090) {
     resource function get __toolsearch__/[string toolQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${toolQuery}`);
-            inline_response_200_4 searchResult = check self.centralApiClient->get("/tools?" + toolQuery);
+            ToolSearchResult searchResult = check self.centralApiClient->get("/tools?" + toolQuery);
 
             xml[] toolEntries = [];
             PackageJsonSchema[]? tools = searchResult.tools;

@@ -315,30 +315,30 @@ service /repository on new http:Listener(9090) {
     resource function get __toolsearch__/[string toolQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${toolQuery}`);
-            inline_response_200_4 searchResult = check self.centralApiClient->/tools.get(q = getEncodedUri(toolQuery));
+            inline_response_200_4 searchResult = check self.centralApiClient->get("/tools?" + toolQuery);
 
-            xml[] packageEntries = [];
+            xml[] toolEntries = [];
             PackageJsonSchema[]? tools = searchResult.tools;
             if tools is PackageJsonSchema[] {
 
                 foreach PackageJsonSchema tool in tools {
-                    xml packageEntry = xml `<package>
+                    xml toolEntry = xml `<tool>
                     <org>${tool.organization}</org>
                     <name>${tool.name}</name>
                     <version>${tool.version}</version>
                     <summary>${tool.summary}</summary>
                     <createdDate>${tool.createdDate}</createdDate>
                     <balToolId>${tool.balToolId ?: ""}</balToolId>
-                </package>`;
-                    packageEntries.push(packageEntry);
+                </tool>`;
+                    toolEntries.push(toolEntry);
                 }
             }
-            xml packagesXml = xml:concat(...packageEntries);
+            xml toolsXml = xml:concat(...toolEntries);
 
             xml metadata = xml `<metadata>
-                        <groupId>__packagesearch__</groupId>
+                        <groupId>__toolsearch__</groupId>
                         <artifactId>${toolQuery}</artifactId>
-                        <packages>${packagesXml}</packages>
+                        <tools>${toolsXml}</tools>
                         <count>${searchResult.count ?: 0}</count>
                         <limit>${searchResult.'limit ?: 0}</limit>
                         <offset>${searchResult.offset ?: 0}</offset>

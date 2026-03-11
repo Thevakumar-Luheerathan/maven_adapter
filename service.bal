@@ -436,26 +436,12 @@ service /repository on new http:Listener(9090) {
             string[] versions = check responseJson.cloneWithType();
             foreach string version in versions {
                 PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[package]/[version];
-                xml[] moduleEntries = [];
-                foreach ModuleInfo moduleInfo in versionMetadata.modules {
-                    xml moduleEntry = xml `<module>
-                                                <name>${moduleInfo.name}</name>
-                                            </module>`;
-                    moduleEntries.push(moduleEntry);
-                }
-                xml modulesXml = xml:concat(...moduleEntries);
-
-                xml versionEntry = xml `<Bversion>
+                xml versionEntry = xml `<version>
                 <number>${version}</number>
                 <platform>${versionMetadata.platform}</platform>
-                <languageSpecificationVersion>${versionMetadata.languageSpecificationVersion}</languageSpecificationVersion>
                 <isDeprecated>${versionMetadata.isDeprecated.toString()}</isDeprecated>
-                <deprecateMessage>${versionMetadata.deprecateMessage}</deprecateMessage>
                 <ballerinaVersion>${versionMetadata.ballerinaVersion}</ballerinaVersion>
-                <balToolId>${versionMetadata.balToolId}</balToolId>
-                <graalvmCompatible>${versionMetadata.graalvmCompatible}</graalvmCompatible>
-                <modules>${modulesXml}</modules>
-            </Bversion>`;
+            </version>`;
                 versionEntries.push(versionEntry);
             }
         }
@@ -463,7 +449,7 @@ service /repository on new http:Listener(9090) {
         xml metadata = xml `<metadata>
                             <groupId>${org}</groupId>
                             <artifactId>${package}</artifactId>
-                                <Bversions>${versionsXml}</Bversions>
+                                <versions>${versionsXml}</versions>
                         </metadata>`;
         http:Response response = new;
         response.setXmlPayload(metadata);

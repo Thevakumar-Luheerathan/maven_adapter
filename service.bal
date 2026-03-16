@@ -1,22 +1,25 @@
 import ballerina/http;
 import ballerina/log;
 
-service /repository on new http:Listener(9090) {
-    final string serviceUrl = "https://api.central.ballerina.io/2.0/registry";
-    final string graphqlUrl = "https://api.central.ballerina.io/2.0";
-    final http:ClientConfiguration httpClientConfig = {timeout: 300};
-    http:Client centralApiClient;
-    http:Client graphqlClient;
+configurable string centralApiUrl = "https://api.central.ballerina.io/2.0/registry";
+configurable string graphqlApiUrl = "https://api.central.ballerina.io/2.0";
+configurable decimal clientTimeout = 300;
 
-    public isolated function init() returns error? {
-        self.centralApiClient = check new (self.serviceUrl, self.httpClientConfig);
-        self.graphqlClient = check new (self.graphqlUrl, self.httpClientConfig);
-    }
+final http:Client pkgApiClient = check intializePkgApiClient();
+final http:Client pkgGraphqlApiClient = check intializePkgGraphqlApiClient();
 
+function intializePkgApiClient() returns http:Client|error {
+    return check new (centralApiUrl, {timeout: clientTimeout});
+}
+function intializePkgGraphqlApiClient() returns http:Client|error {
+    return check new (graphqlApiUrl, {timeout: clientTimeout});
+}
+
+isolated service /repository on new http:Listener(9090) {
     resource function get __packagesearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${pkgQuery}`);
-            PackageSearchResult searchResult = check self.centralApiClient->get("/packages?" + pkgQuery);
+            PackageSearchResult searchResult = check pkgApiClient->get("/packages?" + pkgQuery);
 
             xml[] packageEntries = [];
             PackageJsonSchema[]? packages = searchResult.packages;
@@ -53,7 +56,7 @@ service /repository on new http:Listener(9090) {
     resource function get __packagesearchsolr__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${pkgQuery}`);
-            PackageSearchSolrResult pkgSolrResult = check self.centralApiClient->get("/search-packages?" + pkgQuery);
+            PackageSearchSolrResult pkgSolrResult = check pkgApiClient->get("/search-packages?" + pkgQuery);
             xml[] packageEntries = [];
             Package[]? packages = pkgSolrResult.packages;
             if packages is Package[] {
@@ -92,7 +95,7 @@ service /repository on new http:Listener(9090) {
     resource function get __symbolsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the symbols for query:${pkgQuery}`);
-            SymbolResponse symbolResponse = check self.centralApiClient->get("/search-symbols?" + pkgQuery);
+            SymbolResponse symbolResponse = check pkgApiClient->get("/search-symbols?" + pkgQuery);
             xml[] symbolEntries = [];
             Symbol[]? symbols = symbolResponse.symbols;
             if symbols is Symbol[] {
@@ -139,7 +142,7 @@ service /repository on new http:Listener(9090) {
     resource function get __connectorsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the connectors for query:${pkgQuery}`);
-            ConnectorSearchResult connectorResult = check self.centralApiClient->get("/connectors?" + pkgQuery);
+            ConnectorSearchResult connectorResult = check pkgApiClient->get("/connectors?" + pkgQuery);
             xml[] connectorEntries = [];
             ConnectorsResultSchema[]? connectors = connectorResult.connectors;
             if connectors is ConnectorsResultSchema[] {
@@ -222,19 +225,19 @@ service /repository on new http:Listener(9090) {
     resource function get __tools__/[string toolId]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Requesting tool metadata for toolId:${toolId}`);
-            ToolMetadata toolMetadata = check self.centralApiClient->/tools/[toolId];
+            ToolMetadata toolMetadata = check pkgApiClient->/tools/[toolId];
             string org = toolMetadata.organization;
             string packageName = toolMetadata.name;
             
             log:printInfo(string `Requesting versions for tool org:${org} package:${packageName}`);
-            http:Response centralResponse = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(packageName)].get();
+            http:Response centralResponse = check pkgApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(packageName)].get();
             xml[] versionEntries = [];
             
             if centralResponse.statusCode == 200 {
                 json responseJson = check centralResponse.getJsonPayload();
                 string[] versions = check responseJson.cloneWithType();
                 foreach string version in versions {
-                    PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[packageName]/[version];
+                    PackageMetadata versionMetadata = check pkgApiClient->/packages/[org]/[packageName]/[version];
                     
                     xml versionEntry = xml `<version>
                         <number>${version}</number>
@@ -263,7 +266,7 @@ service /repository on new http:Listener(9090) {
     resource function get __tools__/[string toolId]/[string version]/[string balafile]() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Requesting the tool toolId:${toolId} version:${version}`);
-            http:Response centralResponse = check self.centralApiClient->/tools/[toolId]/[version];
+            http:Response centralResponse = check pkgApiClient->/tools/[toolId]/[version];
             if centralResponse.statusCode != 200 {
                 check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
             }
@@ -280,7 +283,7 @@ service /repository on new http:Listener(9090) {
     resource function get __toolsearch__/[string toolQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${toolQuery}`);
-            ToolSearchResult searchResult = check self.centralApiClient->get("/tools?" + toolQuery);
+            ToolSearchResult searchResult = check pkgApiClient->get("/tools?" + toolQuery);
 
             xml[] toolEntries = [];
             PackageJsonSchema[]? tools = searchResult.tools;
@@ -317,7 +320,7 @@ service /repository on new http:Listener(9090) {
     isolated resource function get __function__/[string org]/[string package]/[string ver]/[string functionname]() returns http:Response|http:InternalServerError {
         do {
             //TODO: Generate actual function metadata content based on org, package and version
-            return check self.getDependencyGraph(org, package, ver);
+            return check getDependencyGraph(org, package, ver);
         } on fail error err {
             return handleError("getting function metadata", string `org: ${org}, package: ${package}, version: ${ver}`, err);
         }
@@ -326,11 +329,11 @@ service /repository on new http:Listener(9090) {
     isolated resource function get [string org]/[string package]/[string ver]/[string file]() returns http:Response|http:InternalServerError {
         do {
             if file.endsWith(".bala") {
-                return check self.getBalaFile(org, package, ver);
+                return check getBalaFile(org, package, ver);
             } else if (file.endsWith("-depgraph.json")) {
-                return check self.getDependencyGraph(org, package, ver);
+                return check getDependencyGraph(org, package, ver);
             } else if (file.endsWith("-listeners.json")) {
-                return check self.getListenersJson(org, package, ver);
+                return check getListenersJson(org, package, ver);
             }
             return {body: string `Requested file ${file} is not supported. Only .bala, -depgraph.json and -listeners.json files are supported.`};
         } on fail error err {
@@ -340,7 +343,7 @@ service /repository on new http:Listener(9090) {
 
     resource function get [string org]/[string package]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
-            return check self.getPackageMetadataXml(org, package);
+            return check getPackageMetadataXml(org, package);
         } on fail error err {
             return handleError("getting package metadata", string `org: ${org}, package: ${package}`, err);
         }
@@ -357,80 +360,80 @@ service /repository on new http:Listener(9090) {
         return http:OK;
     }
 
-    isolated function getBalaFile(string org, string package, string ver) returns http:Response|error {
-        log:printInfo(string `Requesting the package org:${org} package:${package} version:${ver}`);
-        http:Response centralResponse = check self.centralApiClient->/packages/[org]/[package]/[ver]({
-            "Accept-Encoding": "identity",
-            "Accept": "application/octet-stream"
-        });
-        if centralResponse.statusCode != 302 {
-            check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
-        }
-        string filePath = check centralResponse.getHeader("Location");
-        http:Client fileServer = check new (filePath);
-        http:Response downloadResponse = check fileServer->get("");
-        return downloadResponse;
-    }
+}
 
-    isolated function getDependencyGraph(string org, string package, string ver) returns http:Response|error {
-        log:printInfo(string `Requesting the dependency graph for org:${org} package:${package} version:${ver}`);
-        http:Response centralResponse = check self.centralApiClient->/packages/resolve\-dependencies.post({
-            packages: [
-                {
-                    org: org,
-                    name: package,
-                    version: ver,
-                    mode: "hard"
-                }
-            ]
-        });
-        return centralResponse;
+isolated function getBalaFile(string org, string package, string ver) returns http:Response|error {
+    log:printInfo(string `Requesting the package org:${org} package:${package} version:${ver}`);
+    http:Response centralResponse = check pkgApiClient->/packages/[org]/[package]/[ver]({
+        "Accept-Encoding": "identity",
+        "Accept": "application/octet-stream"
+    });
+    if centralResponse.statusCode != 302 {
+        check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
     }
+    string filePath = check centralResponse.getHeader("Location");
+    http:Client fileServer = check new (filePath);
+    http:Response downloadResponse = check fileServer->get("");
+    return downloadResponse;
+}
 
-    isolated function getPackageMetadataXml(string org, string package) returns http:Response|error {
-        log:printInfo(string `Requesting the package metadata for org:${org} package:${package}`);
-        http:Response centralResponse = check self.centralApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
-        xml[] versionEntries = [];
-        if centralResponse.statusCode == 200 {
-            json responseJson = check centralResponse.getJsonPayload();
-            string[] versions = check responseJson.cloneWithType();
-            foreach string version in versions {
-                PackageMetadata versionMetadata = check self.centralApiClient->/packages/[org]/[package]/[version];
-                xml versionEntry = xml `<version>
+isolated function getDependencyGraph(string org, string package, string ver) returns http:Response|error {
+    log:printInfo(string `Requesting the dependency graph for org:${org} package:${package} version:${ver}`);
+    http:Response centralResponse = check pkgApiClient->/packages/resolve\-dependencies.post({
+        packages: [
+            {
+                org: org,
+                name: package,
+                version: ver,
+                mode: "hard"
+            }
+        ]
+    });
+    return centralResponse;
+}
+
+isolated function getPackageMetadataXml(string org, string package) returns http:Response|error {
+    log:printInfo(string `Requesting the package metadata for org:${org} package:${package}`);
+    http:Response centralResponse = check pkgApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
+    xml[] versionEntries = [];
+    if centralResponse.statusCode == 200 {
+        json responseJson = check centralResponse.getJsonPayload();
+        string[] versions = check responseJson.cloneWithType();
+        foreach string version in versions {
+            PackageMetadata versionMetadata = check pkgApiClient->/packages/[org]/[package]/[version];
+            xml versionEntry = xml `<version>
                 <number>${version}</number>
                 <platform>${versionMetadata.platform}</platform>
                 <isDeprecated>${versionMetadata.isDeprecated.toString()}</isDeprecated>
                 <ballerinaVersion>${versionMetadata.ballerinaVersion}</ballerinaVersion>
             </version>`;
-                versionEntries.push(versionEntry);
-            }
+            versionEntries.push(versionEntry);
         }
-        xml versionsXml = xml:concat(...versionEntries);
-        xml metadata = xml `<metadata>
+    }
+    xml versionsXml = xml:concat(...versionEntries);
+    xml metadata = xml `<metadata>
                             <groupId>${org}</groupId>
                             <artifactId>${package}</artifactId>
                                 <versions>${versionsXml}</versions>
                         </metadata>`;
-        return createXmlResponse(metadata);
-    }
+    return createXmlResponse(metadata);
+}
 
-    isolated function getListenersJson(string org, string package, string ver) returns http:Response|error {
-        log:printInfo(string `Requesting listeners metadata for org:${org} package:${package} version:${ver}`);
-        
-        string graphqlQuery = string `query ApiDocs { apiDocs(inputFilter: { moduleInfo: { orgName: "${org}", moduleName: "${package}", version: "${ver}" } }) { docsData { modules { listeners } } } }`;
-        
-        json graphqlPayload = {
-            query: graphqlQuery
-        };
-        
-        http:Response graphqlResponse = check self.graphqlClient->/graphql.post(graphqlPayload);
-        
-        if graphqlResponse.statusCode != 200 {
-            check error(string `GraphQL request failed with status code: ${graphqlResponse.statusCode}`);
-        }
-        json responseJson = check graphqlResponse.getJsonPayload();
-        return createJsonResponse(responseJson);
+isolated function getListenersJson(string org, string package, string ver) returns http:Response|error {
+    log:printInfo(string `Requesting listeners metadata for org:${org} package:${package} version:${ver}`);
+    
+    string graphqlQuery = string `query ApiDocs { apiDocs(inputFilter: { moduleInfo: { orgName: "${org}", moduleName: "${package}", version: "${ver}" } }) { docsData { modules { listeners } } } }`;
+    
+    json graphqlPayload = {
+        query: graphqlQuery
+    };
+    
+    http:Response graphqlResponse = check pkgGraphqlApiClient->/graphql.post(graphqlPayload);
+    
+    if graphqlResponse.statusCode != 200 {
+        check error(string `GraphQL request failed with status code: ${graphqlResponse.statusCode}`);
     }
-
+    json responseJson = check graphqlResponse.getJsonPayload();
+    return createJsonResponse(responseJson);
 }
 

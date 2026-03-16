@@ -1,164 +1,12 @@
 import ballerina/http;
+import ballerina/log;
 import ballerina/url;
-import ballerina/file;
-import ballerina/os;
-import ballerina/io;
-
-string repoDir = check file:joinPath(os:getUserHome(), "ballerina-repository");
-
-type SimpleBasicType string|boolean|int|float|decimal;
-
-# Represents encoding mechanism details.
-type Encoding record {
-    # Defines how multiple values are delimited
-    string style = FORM;
-    # Specifies whether arrays and objects should generate as separate fields
-    boolean explode = true;
-    # Specifies the custom content type
-    string contentType?;
-    # Specifies the custom headers
-    map<any> headers?;
-};
-
-enum EncodingStyle {
-    DEEPOBJECT, FORM, SPACEDELIMITED, PIPEDELIMITED
-}
-
-final Encoding & readonly defaultEncoding = {};
-
-# Serialize the record according to the deepObject style.
-#
-# + parent - Parent record name
-# + anyRecord - Record to be serialized
-# + return - Serialized record as a string
-isolated function getDeepObjectStyleRequest(string parent, record {} anyRecord) returns string {
-    string[] recordArray = [];
-    foreach [string, anydata] [key, value] in anyRecord.entries() {
-        if value is SimpleBasicType {
-            recordArray.push(parent + "[" + key + "]" + "=" + getEncodedUri(value.toString()));
-        } else if value is SimpleBasicType[] {
-            recordArray.push(getSerializedArray(parent + "[" + key + "]" + "[]", value, DEEPOBJECT, true));
-        } else if value is record {} {
-            string nextParent = parent + "[" + key + "]";
-            recordArray.push(getDeepObjectStyleRequest(nextParent, value));
-        } else if value is record {}[] {
-            string nextParent = parent + "[" + key + "]";
-            recordArray.push(getSerializedRecordArray(nextParent, value, DEEPOBJECT));
-        }
-        recordArray.push("&");
-    }
-    _ = recordArray.pop();
-    return string:'join("", ...recordArray);
-}
-
-# Serialize the record according to the form style.
-#
-# + parent - Parent record name
-# + anyRecord - Record to be serialized
-# + explode - Specifies whether arrays and objects should generate separate parameters
-# + return - Serialized record as a string
-isolated function getFormStyleRequest(string parent, record {} anyRecord, boolean explode = true) returns string {
-    string[] recordArray = [];
-    if explode {
-        foreach [string, anydata] [key, value] in anyRecord.entries() {
-            if value is SimpleBasicType {
-                recordArray.push(key, "=", getEncodedUri(value.toString()));
-            } else if value is SimpleBasicType[] {
-                recordArray.push(getSerializedArray(key, value, explode = explode));
-            } else if value is record {} {
-                recordArray.push(getFormStyleRequest(parent, value, explode));
-            }
-            recordArray.push("&");
-        }
-        _ = recordArray.pop();
-    } else {
-        foreach [string, anydata] [key, value] in anyRecord.entries() {
-            if value is SimpleBasicType {
-                recordArray.push(key, ",", getEncodedUri(value.toString()));
-            } else if value is SimpleBasicType[] {
-                recordArray.push(getSerializedArray(key, value, explode = false));
-            } else if value is record {} {
-                recordArray.push(getFormStyleRequest(parent, value, explode));
-            }
-            recordArray.push(",");
-        }
-        _ = recordArray.pop();
-    }
-    return string:'join("", ...recordArray);
-}
-
-# Serialize arrays.
-#
-# + arrayName - Name of the field with arrays
-# + anyArray - Array to be serialized
-# + style - Defines how multiple values are delimited
-# + explode - Specifies whether arrays and objects should generate separate parameters
-# + return - Serialized array as a string
-isolated function getSerializedArray(string arrayName, anydata[] anyArray, string style = "form", boolean explode = true) returns string {
-    string key = arrayName;
-    string[] arrayValues = [];
-    if anyArray.length() > 0 {
-        if style == FORM && !explode {
-            arrayValues.push(key, "=");
-            foreach anydata i in anyArray {
-                arrayValues.push(getEncodedUri(i.toString()), ",");
-            }
-        } else if style == SPACEDELIMITED && !explode {
-            arrayValues.push(key, "=");
-            foreach anydata i in anyArray {
-                arrayValues.push(getEncodedUri(i.toString()), "%20");
-            }
-        } else if style == PIPEDELIMITED && !explode {
-            arrayValues.push(key, "=");
-            foreach anydata i in anyArray {
-                arrayValues.push(getEncodedUri(i.toString()), "|");
-            }
-        } else if style == DEEPOBJECT {
-            foreach anydata i in anyArray {
-                arrayValues.push(key, "[]", "=", getEncodedUri(i.toString()), "&");
-            }
-        } else {
-            foreach anydata i in anyArray {
-                arrayValues.push(key, "=", getEncodedUri(i.toString()), "&");
-            }
-        }
-        _ = arrayValues.pop();
-    }
-    return string:'join("", ...arrayValues);
-}
-
-# Serialize the array of records according to the form style.
-#
-# + parent - Parent record name
-# + value - Array of records to be serialized
-# + style - Defines how multiple values are delimited
-# + explode - Specifies whether arrays and objects should generate separate parameters
-# + return - Serialized record as a string
-isolated function getSerializedRecordArray(string parent, record {}[] value, string style = FORM, boolean explode = true) returns string {
-    string[] serializedArray = [];
-    if style == DEEPOBJECT {
-        int arayIndex = 0;
-        foreach var recordItem in value {
-            serializedArray.push(getDeepObjectStyleRequest(parent + "[" + arayIndex.toString() + "]", recordItem), "&");
-            arayIndex = arayIndex + 1;
-        }
-    } else {
-        if !explode {
-            serializedArray.push(parent, "=");
-        }
-        foreach var recordItem in value {
-            serializedArray.push(getFormStyleRequest(parent, recordItem, explode), ",");
-        }
-    }
-    _ = serializedArray.pop();
-    return string:'join("", ...serializedArray);
-}
 
 # Get Encoded URI for a given value.
 #
 # + value - Value to be encoded
 # + return - Encoded string
-isolated function getEncodedUri(anydata value) returns string {
+public isolated function getEncodedUri(anydata value) returns string {
     string|error encoded = url:encode(value.toString(), "UTF8");
     if encoded is string {
         return encoded;
@@ -167,69 +15,60 @@ isolated function getEncodedUri(anydata value) returns string {
     }
 }
 
-# Generate query path with query parameter.
+# Handle errors and return appropriate HTTP error response.
 #
-# + queryParam - Query parameter map
-# + encodingMap - Details on serialization mechanism
-# + return - Returns generated Path or error at failure of client initialization
-isolated function getPathForQueryParam(map<anydata> queryParam, map<Encoding> encodingMap = {}) returns string|error {
-    map<anydata> queriesMap = http:getQueryMap(queryParam);
-    string[] param = [];
-    if queriesMap.length() > 0 {
-        param.push("?");
-        foreach var [key, value] in queriesMap.entries() {
-            if value is () {
-                _ = queriesMap.remove(key);
-                continue;
-            }
-            Encoding encodingData = encodingMap.hasKey(key) ? encodingMap.get(key) : defaultEncoding;
-            if value is SimpleBasicType {
-                param.push(key, "=", getEncodedUri(value.toString()));
-            } else if value is SimpleBasicType[] {
-                param.push(getSerializedArray(key, value, encodingData.style, encodingData.explode));
-            } else if value is record {} {
-                if encodingData.style == DEEPOBJECT {
-                    param.push(getDeepObjectStyleRequest(key, value));
-                } else {
-                    param.push(getFormStyleRequest(key, value, encodingData.explode));
-                }
-            } else {
-                param.push(key, "=", value.toString());
-            }
-            param.push("&");
-        }
-        _ = param.pop();
-    }
-    string restOfPath = string:'join("", ...param);
-    return restOfPath;
+# + operation - Operation being performed
+# + message - Context message
+# + err - Error that occurred
+# + return - HTTP Internal Server Error response
+public isolated function handleError(string operation, string message, error err) returns http:InternalServerError {
+    string errorMessage = string `Error occurred while ${operation}: ${message}`;
+    log:printError(errorMessage, reason = err.message());
+    return {body: errorMessage};
 }
 
-isolated function getDependencyGraphFromBala(string tempBalaDir, string tempBalaFile) returns json|error {
-
-    error? decompressError = extract(tempBalaFile, tempBalaDir);
-    if decompressError is error {
-        return error("unable to read bala file as it may be corrupted");
-    }
-    string dependencyGraphPath = tempBalaDir + "/dependency-graph.json";
-    json depGraph = check io:fileReadJson(dependencyGraphPath);
-    file:Error? remove = file:remove(tempBalaDir, file:RECURSIVE);
-    if remove is file:Error {
-        return error ("unexpected error occurred while pushing package ", remove);
-    }
-    return depGraph;
+# Create XML HTTP response with proper headers.
+#
+# + payload - XML payload
+# + return - HTTP Response with XML content
+public isolated function createXmlResponse(xml payload) returns http:Response {
+    http:Response response = new;
+    response.setXmlPayload(payload);
+    response.setHeader("Content-Type", "application/xml");
+    return response;
 }
 
-isolated function getPackageJsonFromBala(string tempBalaDir, string tempBalaFile) returns json|error {
+# Create JSON HTTP response with proper headers.
+#
+# + payload - JSON payload
+# + return - HTTP Response with JSON content
+public isolated function createJsonResponse(json payload) returns http:Response {
+    http:Response response = new;
+    response.setJsonPayload(payload);
+    response.setHeader("Content-Type", "application/json");
+    return response;
+}
 
-    error? decompressError = extract(tempBalaFile, tempBalaDir);
-    if decompressError is error {
-        return error("unable to read bala file as it may be corrupted");
-    }
-    string packageJsonPath = tempBalaDir + "/package.json";
-    json packageJson = check io:fileReadJson(packageJsonPath);
-    file:Error? remove = file:remove(tempBalaDir, file:RECURSIVE);
-    if remove is file:Error {
-        return error ("unexpected error occurred while pushing package ", remove);
-    }
-    return packageJson;
+# Build XML for authors array.
+#
+# + authors - Array of author names
+# + return - XML representation of authors
+public isolated function buildAuthorsXml(string[] authors) returns xml {
+    return xml:concat(...authors.map(author => xml `<author>${author}</author>`));
+}
+
+# Build XML for keywords array.
+#
+# + keywords - Array of keywords
+# + return - XML representation of keywords
+public isolated function buildKeywordsXml(string[] keywords) returns xml {
+    return xml:concat(...keywords.map(keyword => xml `<keyword>${keyword}</keyword>`));
+}
+
+# Build XML for licenses array.
+#
+# + licenses - Array of licenses
+# + return - XML representation of licenses
+public isolated function buildLicensesXml(string[] licenses) returns xml {
+    return xml:concat(...licenses.map(license => xml `<license>${license}</license>`));
 }

@@ -1,8 +1,6 @@
 import ballerina/http;
 import ballerina/log;
 
-type BalaFile string;
-
 service /repository on new http:Listener(9090) {
     final string serviceUrl = "https://api.central.ballerina.io/2.0/registry";
     final string graphqlUrl = "https://api.central.ballerina.io/2.0";
@@ -31,7 +29,7 @@ service /repository on new http:Listener(9090) {
                     <version>${package.version}</version>
                     <summary>${package.summary}</summary>
                     <createdDate>${package.createdDate}</createdDate>
-                    <authors>${xml:concat(...package.authors.map(a => xml `<author>${a}</author>`))}</authors>
+                    <authors>${buildAuthorsXml(package.authors)}</authors>
                 </package>`;
                     packageEntries.push(packageEntry);
                 }
@@ -46,13 +44,9 @@ service /repository on new http:Listener(9090) {
                         <limit>${searchResult.'limit ?: 0}</limit>
                         <offset>${searchResult.offset ?: 0}</offset>
                     </metadata>`;
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
+            return createXmlResponse(metadata);
         } on fail error err {
-            log:printError(string `Error occured while searching the package for the query:${pkgQuery} reason:${err.message()}`);
-            return {body: string `Error occured while searching the package for the query:${pkgQuery}`};
+            return handleError("searching packages", string `query: ${pkgQuery}`, err);
         }
     }
 
@@ -71,9 +65,9 @@ service /repository on new http:Listener(9090) {
                         <version>${package.version}</version>
                         <summary>${package.summary}</summary>
                         <createdDate>${package.createdDate}</createdDate>
-                        <authors>${xml:concat(...package.authors.map(a => xml `<author>${a}</author>`))}</authors>
+                        <authors>${buildAuthorsXml(package.authors)}</authors>
                         <balToolId>${package.balToolId ?: ""}</balToolId>
-                        <keywords>${xml:concat(...package.keywords.map(k => xml `<keyword>${k}</keyword>`))}</keywords>
+                        <keywords>${buildKeywordsXml(package.keywords)}</keywords>
                         <pullCount>${package.pullCount}</pullCount>
                     </package>`;
                     packageEntries.push(packageEntry);
@@ -89,13 +83,9 @@ service /repository on new http:Listener(9090) {
                     <limit>${pkgSolrResult.'limit}</limit>
                     <offset>${pkgSolrResult.offset}</offset>
             </metadata>`;
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
+            return createXmlResponse(metadata);
         } on fail error err {
-            log:printError(string `Error occured while searching the package for the query:${pkgQuery} reason:${err.message()}`);
-            return {body: string `Error occured while searching the package for the query:${pkgQuery}`};
+            return handleError("searching packages (solr)", string `query: ${pkgQuery}`, err);
         }
     }
 
@@ -140,13 +130,9 @@ service /repository on new http:Listener(9090) {
                 <limit>${symbolResponse.'limit}</limit>
                 <offset>${symbolResponse.offset}</offset>
             </metadata>`;
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
+            return createXmlResponse(metadata);
         } on fail error err {
-            log:printError(string `Error occured while searching symbols for the query:${pkgQuery} reason:${err.message()}`);
-            return {body: string `Error occured while searching symbols for the query:${pkgQuery}`};
+            return handleError("searching symbols", string `query: ${pkgQuery}`, err);
         }
     }
 
@@ -173,23 +159,9 @@ service /repository on new http:Listener(9090) {
                     xml functionsXml = xml:concat(...functionEntries);
 
                     ConnectorPackageSchema connectorPackage = connector.package;
-                    xml[] keywordEntries = [];
-                    foreach string keyword in connectorPackage.keywords {
-                        keywordEntries.push(xml `<keyword>${keyword}</keyword>`);
-                    }
-                    xml keywordsXml = xml:concat(...keywordEntries);
-
-                    xml[] authorEntries = [];
-                    foreach string author in connectorPackage.authors {
-                        authorEntries.push(xml `<author>${author}</author>`);
-                    }
-                    xml authorsXml = xml:concat(...authorEntries);
-
-                    xml[] licenseEntries = [];
-                    foreach string license in connectorPackage.licenses {
-                        licenseEntries.push(xml `<license>${license}</license>`);
-                    }
-                    xml licensesXml = xml:concat(...licenseEntries);
+                    xml keywordsXml = buildKeywordsXml(connectorPackage.keywords);
+                    xml authorsXml = buildAuthorsXml(connectorPackage.authors);
+                    xml licensesXml = buildLicensesXml(connectorPackage.licenses);
 
                     xml connectorEntry = xml `<connector>
                         <id>${connector.id}</id>
@@ -241,13 +213,9 @@ service /repository on new http:Listener(9090) {
                 <limit>${connectorResult.'limit}</limit>
                 <offset>${connectorResult.offset}</offset>
             </metadata>`;
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
+            return createXmlResponse(metadata);
         } on fail error err {
-            log:printError(string `Error occured while searching connectors for the query:${pkgQuery} reason:${err.message()}`);
-            return {body: string `Error occured while searching connectors for the query:${pkgQuery}`};
+            return handleError("searching connectors", string `query: ${pkgQuery}`, err);
         }
     }
 
@@ -286,13 +254,9 @@ service /repository on new http:Listener(9090) {
                 <package>${packageName}</package>
             </metadata>`;
             
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
+            return createXmlResponse(metadata);
         } on fail error err {
-            log:printError(string `Error occured while getting tool metadata for toolId:${toolId} reason:${err.message()}`);
-            return {body: string `Error occured while getting tool metadata for toolId:${toolId}`};
+            return handleError("getting tool metadata", string `toolId: ${toolId}`, err);
         }
     }
 
@@ -309,8 +273,7 @@ service /repository on new http:Listener(9090) {
             http:Response downloadResponse = check fileServer->get("");
             return downloadResponse;
         } on fail error err {
-            log:printError(string `Error occured while getting tool file for toolId:${toolId} version:${version} reason:${err.message()}`);
-            return {body: string `Error occured while getting tool file for toolId:${toolId} version:${version}`};
+            return handleError("getting tool file", string `toolId: ${toolId}, version: ${version}`, err);
         }
     }
 
@@ -345,13 +308,9 @@ service /repository on new http:Listener(9090) {
                         <limit>${searchResult.'limit ?: 0}</limit>
                         <offset>${searchResult.offset ?: 0}</offset>
                     </metadata>`;
-            http:Response response = new;
-            response.setXmlPayload(metadata);
-            response.setHeader("Content-Type", "application/xml");
-            return response;
+            return createXmlResponse(metadata);
         } on fail error err {
-            log:printError(string `Error occured while searching the package for the query:${toolQuery} reason:${err.message()}`);
-            return {body: string `Error occured while searching the package for the query:${toolQuery}`};
+            return handleError("searching tools", string `query: ${toolQuery}`, err);
         }
     }
 
@@ -360,8 +319,7 @@ service /repository on new http:Listener(9090) {
             //TODO: Generate actual function metadata content based on org, package and version
             return check self.getDependencyGraph(org, package, ver);
         } on fail error err {
-            log:printError(string `Error occured while pulling the artifact org:${org} package:${package} version:${ver} reason:${err.message()}`);
-            return {body: string `Error occured while pulling the artifact org:${org} package:${package} version:${ver}`};
+            return handleError("getting function metadata", string `org: ${org}, package: ${package}, version: ${ver}`, err);
         }
     }
 
@@ -376,8 +334,7 @@ service /repository on new http:Listener(9090) {
             }
             return {body: string `Requested file ${file} is not supported. Only .bala, -depgraph.json and -listeners.json files are supported.`};
         } on fail error err {
-            log:printError(string `Error occured while pulling the artifact org:${org} package:${package} version:${ver} reason:${err.message()}`);
-            return {body: string `Error occured while pulling the artifact org:${org} package:${package} version:${ver}`};
+            return handleError("pulling artifact", string `org: ${org}, package: ${package}, version: ${ver}, file: ${file}`, err);
         }
     }
 
@@ -385,8 +342,7 @@ service /repository on new http:Listener(9090) {
         do {
             return check self.getPackageMetadataXml(org, package);
         } on fail error err {
-            log:printError(string `Error occured while getting package metadata for org:${org} package:${package} reason:${err.message()}`);
-            return {body: string `Error occured while getting package metadata for org:${org} package:${package}`};
+            return handleError("getting package metadata", string `org: ${org}, package: ${package}`, err);
         }
     }
 
@@ -455,10 +411,7 @@ service /repository on new http:Listener(9090) {
                             <artifactId>${package}</artifactId>
                                 <versions>${versionsXml}</versions>
                         </metadata>`;
-        http:Response response = new;
-        response.setXmlPayload(metadata);
-        response.setHeader("Content-Type", "application/xml");
-        return response;
+        return createXmlResponse(metadata);
     }
 
     isolated function getListenersJson(string org, string package, string ver) returns http:Response|error {
@@ -476,10 +429,8 @@ service /repository on new http:Listener(9090) {
             check error(string `GraphQL request failed with status code: ${graphqlResponse.statusCode}`);
         }
         json responseJson = check graphqlResponse.getJsonPayload();
-        http:Response response = new;
-        response.setJsonPayload(responseJson);
-        response.setHeader("Content-Type", "application/json");
-        return response;
+        return createJsonResponse(responseJson);
     }
+
 }
 

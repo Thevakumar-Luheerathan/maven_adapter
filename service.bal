@@ -5,11 +5,14 @@ type BalaFile string;
 
 service /repository on new http:Listener(9090) {
     final string serviceUrl = "https://api.central.ballerina.io/2.0/registry";
+    final string graphqlUrl = "https://api.central.ballerina.io/2.0";
     final http:ClientConfiguration httpClientConfig = {timeout: 300};
     http:Client centralApiClient;
+    http:Client graphqlClient;
 
     public isolated function init() returns error? {
         self.centralApiClient = check new (self.serviceUrl, self.httpClientConfig);
+        self.graphqlClient = check new (self.graphqlUrl, self.httpClientConfig);
     }
 
     resource function get __packagesearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
@@ -210,7 +213,6 @@ service /repository on new http:Listener(9090) {
                             <balaURL>${connectorPackage.balaURL}</balaURL>
                             <digest>${connectorPackage.digest}</digest>
                             <summary>${connectorPackage.summary}</summary>
-                            <readme>${connectorPackage.readme}</readme>
                             <template>${connectorPackage.template}</template>
                             <licenses>${licensesXml}</licenses>
                             <authors>${authorsXml}</authors>
@@ -369,8 +371,10 @@ service /repository on new http:Listener(9090) {
                 return check self.getBalaFile(org, package, ver);
             } else if (file.endsWith("-depgraph.json")) {
                 return check self.getDependencyGraph(org, package, ver);
+            } else if (file.endsWith("-listeners.json")) {
+                return check self.getListenersJson(org, package, ver);
             }
-            return {body: string `Requested file ${file} is not supported. Only .bala and -depgraph.json files are supported.`};
+            return {body: string `Requested file ${file} is not supported. Only .bala, -depgraph.json and -listeners.json files are supported.`};
         } on fail error err {
             log:printError(string `Error occured while pulling the artifact org:${org} package:${package} version:${ver} reason:${err.message()}`);
             return {body: string `Error occured while pulling the artifact org:${org} package:${package} version:${ver}`};
@@ -454,6 +458,27 @@ service /repository on new http:Listener(9090) {
         http:Response response = new;
         response.setXmlPayload(metadata);
         response.setHeader("Content-Type", "application/xml");
+        return response;
+    }
+
+    isolated function getListenersJson(string org, string package, string ver) returns http:Response|error {
+        log:printInfo(string `Requesting listeners metadata for org:${org} package:${package} version:${ver}`);
+        
+        string graphqlQuery = string `query ApiDocs { apiDocs(inputFilter: { moduleInfo: { orgName: "${org}", moduleName: "${package}", version: "${ver}" } }) { docsData { modules { listeners } } } }`;
+        
+        json graphqlPayload = {
+            query: graphqlQuery
+        };
+        
+        http:Response graphqlResponse = check self.graphqlClient->/graphql.post(graphqlPayload);
+        
+        if graphqlResponse.statusCode != 200 {
+            check error(string `GraphQL request failed with status code: ${graphqlResponse.statusCode}`);
+        }
+        json responseJson = check graphqlResponse.getJsonPayload();
+        http:Response response = new;
+        response.setJsonPayload(responseJson);
+        response.setHeader("Content-Type", "application/json");
         return response;
     }
 }

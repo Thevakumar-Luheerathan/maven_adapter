@@ -72,3 +72,22 @@ public isolated function buildKeywordsXml(string[] keywords) returns xml {
 public isolated function buildLicensesXml(string[] licenses) returns xml {
     return xml:concat(...licenses.map(license => xml `<license>${license}</license>`));
 }
+
+# Transform ballerinaVersion from format v2201-13-1 to 2201.13.1
+#
+# + ballerinaVersion - Version string in format v2201-13-1
+# + return - Transformed version string in format 2201.13.1
+public isolated function transformBallerinaVersion(string ballerinaVersion) returns string {
+    string transformedVersion = ballerinaVersion;
+    
+    // Remove 'v' prefix if present
+    if transformedVersion.startsWith("v") {
+        transformedVersion = transformedVersion.substring(1);
+    }
+    
+    // Replace all hyphens with dots
+    string[] parts = re `-`.split(transformedVersion);
+    transformedVersion = string:'join(".", ...parts);
+    
+    return transformedVersion;
+}

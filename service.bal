@@ -11,15 +11,17 @@ final http:Client pkgGraphqlApiClient = check intializePkgGraphqlApiClient();
 function intializePkgApiClient() returns http:Client|error {
     return check new (centralApiUrl, {timeout: clientTimeout});
 }
+
 function intializePkgGraphqlApiClient() returns http:Client|error {
     return check new (graphqlApiUrl, {timeout: clientTimeout});
 }
 
 isolated service /repository on new http:Listener(9090) {
-    resource function get __packagesearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+    resource function get [string ballerinaVersion]/__packagesearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${pkgQuery}`);
-            PackageSearchResult searchResult = check pkgApiClient->get("/packages?" + pkgQuery);
+            string userAgent = transformBallerinaVersion(ballerinaVersion);
+            PackageSearchResult searchResult = check pkgApiClient->get("/packages?" + pkgQuery, {"User-Agent": userAgent});
 
             xml[] packageEntries = [];
             PackageJsonSchema[]? packages = searchResult.packages;
@@ -40,7 +42,7 @@ isolated service /repository on new http:Listener(9090) {
             xml packagesXml = xml:concat(...packageEntries);
 
             xml metadata = xml `<metadata>
-                        <groupId>__packagesearch__</groupId>
+                        <groupId>${ballerinaVersion}.__packagesearch__</groupId>
                         <artifactId>${pkgQuery}</artifactId>
                         <packages>${packagesXml}</packages>
                         <count>${searchResult.count ?: 0}</count>
@@ -53,10 +55,11 @@ isolated service /repository on new http:Listener(9090) {
         }
     }
 
-    resource function get __packagesearchsolr__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+    resource function get [string ballerinaVersion]/__packagesearchsolr__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${pkgQuery}`);
-            PackageSearchSolrResult pkgSolrResult = check pkgApiClient->get("/search-packages?" + pkgQuery);
+            string userAgent = transformBallerinaVersion(ballerinaVersion);
+            PackageSearchSolrResult pkgSolrResult = check pkgApiClient->get("/search-packages?" + pkgQuery, {"User-Agent": userAgent});
             xml[] packageEntries = [];
             Package[]? packages = pkgSolrResult.packages;
             if packages is Package[] {
@@ -79,7 +82,7 @@ isolated service /repository on new http:Listener(9090) {
             xml packagesXml = xml:concat(...packageEntries);
 
             xml metadata = xml `<metadata>
-                <groupId>__packagesearchsolr__</groupId>
+                <groupId>${ballerinaVersion}.__packagesearchsolr__</groupId>
                 <artifactId>${pkgQuery}</artifactId>
                     <packages>${packagesXml}</packages>
                     <count>${pkgSolrResult.count}</count>
@@ -92,10 +95,11 @@ isolated service /repository on new http:Listener(9090) {
         }
     }
 
-    resource function get __symbolsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+    resource function get [string ballerinaVersion]/__symbolsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the symbols for query:${pkgQuery}`);
-            SymbolResponse symbolResponse = check pkgApiClient->get("/search-symbols?" + pkgQuery);
+            string userAgent = transformBallerinaVersion(ballerinaVersion);
+            SymbolResponse symbolResponse = check pkgApiClient->get("/search-symbols?" + pkgQuery, {"User-Agent": userAgent});
             xml[] symbolEntries = [];
             Symbol[]? symbols = symbolResponse.symbols;
             if symbols is Symbol[] {
@@ -126,7 +130,7 @@ isolated service /repository on new http:Listener(9090) {
             xml symbolsXml = xml:concat(...symbolEntries);
 
             xml metadata = xml `<metadata>
-                <groupId>__symbolsearch__</groupId>
+                <groupId>${ballerinaVersion}.__symbolsearch__</groupId>
                 <artifactId>${pkgQuery}</artifactId>
                 <symbols>${symbolsXml}</symbols>
                 <count>${symbolResponse.count}</count>
@@ -139,10 +143,11 @@ isolated service /repository on new http:Listener(9090) {
         }
     }
 
-    resource function get __connectorsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+    resource function get [string ballerinaVersion]/__connectorsearch__/[string pkgQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the connectors for query:${pkgQuery}`);
-            ConnectorSearchResult connectorResult = check pkgApiClient->get("/connectors?" + pkgQuery);
+            string userAgent = transformBallerinaVersion(ballerinaVersion);
+            ConnectorSearchResult connectorResult = check pkgApiClient->get("/connectors?" + pkgQuery, {"User-Agent": userAgent});
             xml[] connectorEntries = [];
             ConnectorsResultSchema[]? connectors = connectorResult.connectors;
             if connectors is ConnectorsResultSchema[] {
@@ -209,7 +214,7 @@ isolated service /repository on new http:Listener(9090) {
             xml connectorsXml = xml:concat(...connectorEntries);
 
             xml metadata = xml `<metadata>
-                <groupId>__connectorsearch__</groupId>
+                <groupId>${ballerinaVersion}.__connectorsearch__</groupId>
                 <artifactId>${pkgQuery}</artifactId>
                 <connectors>${connectorsXml}</connectors>
                 <count>${connectorResult.count}</count>
@@ -222,23 +227,24 @@ isolated service /repository on new http:Listener(9090) {
         }
     }
 
-    resource function get __tools__/[string toolId]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+    resource function get [string ballerinaVersion]/__tools__/[string toolId]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Requesting tool metadata for toolId:${toolId}`);
-            ToolMetadata toolMetadata = check pkgApiClient->/tools/[toolId];
+            string userAgent = transformBallerinaVersion(ballerinaVersion);
+            ToolMetadata toolMetadata = check pkgApiClient->/tools/[toolId].get({"User-Agent": userAgent});
             string org = toolMetadata.organization;
             string packageName = toolMetadata.name;
-            
+
             log:printInfo(string `Requesting versions for tool org:${org} package:${packageName}`);
-            http:Response centralResponse = check pkgApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(packageName)].get();
+            http:Response centralResponse = check pkgApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(packageName)].get({"User-Agent": userAgent});
             xml[] versionEntries = [];
-            
+
             if centralResponse.statusCode == 200 {
                 json responseJson = check centralResponse.getJsonPayload();
                 string[] versions = check responseJson.cloneWithType();
                 foreach string version in versions {
-                    PackageMetadata versionMetadata = check pkgApiClient->/packages/[org]/[packageName]/[version];
-                    
+                    PackageMetadata versionMetadata = check pkgApiClient->/packages/[org]/[packageName]/[version].get({"User-Agent": userAgent});
+
                     xml versionEntry = xml `<version>
                         <number>${version}</number>
                         <platform>${versionMetadata.platform}</platform>
@@ -247,43 +253,27 @@ isolated service /repository on new http:Listener(9090) {
                     versionEntries.push(versionEntry);
                 }
             }
-            
+
             xml versionsXml = xml:concat(...versionEntries);
             xml metadata = xml `<metadata>
-                <groupId>__tools__</groupId>
+                <groupId>${ballerinaVersion}.__tools__</groupId>
                 <artifactId>${toolId}</artifactId>
                 <versions>${versionsXml}</versions>
                 <org>${org}</org>
                 <package>${packageName}</package>
             </metadata>`;
-            
+
             return createXmlResponse(metadata);
         } on fail error err {
             return handleError("getting tool metadata", string `toolId: ${toolId}`, err);
         }
     }
 
-    resource function get __tools__/[string toolId]/[string version]/[string balafile]() returns http:Response|http:InternalServerError {
-        do {
-            log:printInfo(string `Requesting the tool toolId:${toolId} version:${version}`);
-            http:Response centralResponse = check pkgApiClient->/tools/[toolId]/[version];
-            if centralResponse.statusCode != 200 {
-                check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
-            }
-            json jsonPayload = check centralResponse.getJsonPayload();
-            string filePath = check jsonPayload.balaURL;
-            http:Client fileServer = check new (filePath);
-            http:Response downloadResponse = check fileServer->get("");
-            return downloadResponse;
-        } on fail error err {
-            return handleError("getting tool file", string `toolId: ${toolId}, version: ${version}`, err);
-        }
-    }
-
-    resource function get __toolsearch__/[string toolQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+    resource function get [string ballerinaVersion]/__toolsearch__/[string toolQuery]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
         do {
             log:printInfo(string `Searching the package metadata for query:${toolQuery}`);
-            ToolSearchResult searchResult = check pkgApiClient->get("/tools?" + toolQuery);
+            string userAgent = transformBallerinaVersion(ballerinaVersion);
+            ToolSearchResult searchResult = check pkgApiClient->get("/tools?" + toolQuery, {"User-Agent": userAgent});
 
             xml[] toolEntries = [];
             PackageJsonSchema[]? tools = searchResult.tools;
@@ -304,7 +294,7 @@ isolated service /repository on new http:Listener(9090) {
             xml toolsXml = xml:concat(...toolEntries);
 
             xml metadata = xml `<metadata>
-                        <groupId>__toolsearch__</groupId>
+                        <groupId>${ballerinaVersion}.__toolsearch__</groupId>
                         <artifactId>${toolQuery}</artifactId>
                         <tools>${toolsXml}</tools>
                         <count>${searchResult.count ?: 0}</count>
@@ -314,6 +304,32 @@ isolated service /repository on new http:Listener(9090) {
             return createXmlResponse(metadata);
         } on fail error err {
             return handleError("searching tools", string `query: ${toolQuery}`, err);
+        }
+    }
+
+    resource function get [string ballerinaVersion]/[string org]/[string package]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
+        do {
+            string userAgent = transformBallerinaVersion(ballerinaVersion);
+            return check getPackageMetadataXml(org, package, userAgent, ballerinaVersion);
+        } on fail error err {
+            return handleError("getting package metadata", string `org: ${org}, package: ${package}`, err);
+        }
+    }
+
+    resource function get __tools__/[string toolId]/[string version]/[string balafile]() returns http:Response|http:InternalServerError {
+        do {
+            log:printInfo(string `Requesting the tool toolId:${toolId} version:${version}`);
+            http:Response centralResponse = check pkgApiClient->/tools/[toolId]/[version];
+            if centralResponse.statusCode != 200 {
+                check error(string `Unexpected response encountered. Statuscode : ${centralResponse.statusCode}`);
+            }
+            json jsonPayload = check centralResponse.getJsonPayload();
+            string filePath = check jsonPayload.balaURL;
+            http:Client fileServer = check new (filePath);
+            http:Response downloadResponse = check fileServer->get("");
+            return downloadResponse;
+        } on fail error err {
+            return handleError("getting tool file", string `toolId: ${toolId}, version: ${version}`, err);
         }
     }
 
@@ -338,14 +354,6 @@ isolated service /repository on new http:Listener(9090) {
             return {body: string `Requested file ${file} is not supported. Only .bala, -depgraph.json and -listeners.json files are supported.`};
         } on fail error err {
             return handleError("pulling artifact", string `org: ${org}, package: ${package}, version: ${ver}, file: ${file}`, err);
-        }
-    }
-
-    resource function get [string org]/[string package]/maven\-metadata\.xml() returns http:Response|http:InternalServerError {
-        do {
-            return check getPackageMetadataXml(org, package);
-        } on fail error err {
-            return handleError("getting package metadata", string `org: ${org}, package: ${package}`, err);
         }
     }
 
@@ -392,15 +400,15 @@ isolated function getDependencyGraph(string org, string package, string ver) ret
     return centralResponse;
 }
 
-isolated function getPackageMetadataXml(string org, string package) returns http:Response|error {
+isolated function getPackageMetadataXml(string org, string package, string userAgent, string ballerinaVersion) returns http:Response|error {
     log:printInfo(string `Requesting the package metadata for org:${org} package:${package}`);
-    http:Response centralResponse = check pkgApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get();
+    http:Response centralResponse = check pkgApiClient->/packages/[getEncodedUri(org)]/[getEncodedUri(package)].get({"User-Agent": userAgent});
     xml[] versionEntries = [];
     if centralResponse.statusCode == 200 {
         json responseJson = check centralResponse.getJsonPayload();
         string[] versions = check responseJson.cloneWithType();
         foreach string version in versions {
-            PackageMetadata versionMetadata = check pkgApiClient->/packages/[org]/[package]/[version];
+            PackageMetadata versionMetadata = check pkgApiClient->/packages/[org]/[package]/[version].get({"User-Agent": userAgent});
             xml versionEntry = xml `<version>
                 <number>${version}</number>
                 <platform>${versionMetadata.platform}</platform>
@@ -412,7 +420,7 @@ isolated function getPackageMetadataXml(string org, string package) returns http
     }
     xml versionsXml = xml:concat(...versionEntries);
     xml metadata = xml `<metadata>
-                            <groupId>${org}</groupId>
+                            <groupId>${ballerinaVersion}.${org}</groupId>
                             <artifactId>${package}</artifactId>
                                 <versions>${versionsXml}</versions>
                         </metadata>`;
@@ -421,15 +429,15 @@ isolated function getPackageMetadataXml(string org, string package) returns http
 
 isolated function getListenersJson(string org, string package, string ver) returns http:Response|error {
     log:printInfo(string `Requesting listeners metadata for org:${org} package:${package} version:${ver}`);
-    
+
     string graphqlQuery = string `query ApiDocs { apiDocs(inputFilter: { moduleInfo: { orgName: "${org}", moduleName: "${package}", version: "${ver}" } }) { docsData { modules { listeners } } } }`;
-    
+
     json graphqlPayload = {
         query: graphqlQuery
     };
-    
+
     http:Response graphqlResponse = check pkgGraphqlApiClient->/graphql.post(graphqlPayload);
-    
+
     if graphqlResponse.statusCode != 200 {
         check error(string `GraphQL request failed with status code: ${graphqlResponse.statusCode}`);
     }
